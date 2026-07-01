@@ -1,0 +1,15 @@
+[package]
+name = "bevy_elf"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["macros"]
+macros = ["bevy_elf_macros"]
+
+[dependencies]
+bevy_elf_macros = { version = "0.1", optional = true, path = "../bevy_elf_macros"}
+bevy = { version = "0.19", features = ["serialize"] }
+serde = "1.0"
+ron = "0.12"
+thiserror = "2.0"

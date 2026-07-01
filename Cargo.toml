@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["bevy_elf_macros", "bevy_elf"]
