@@ -81,7 +81,7 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements the trait [`FromDef`] for the annotated struct or enum.
+/// Implements the trait `FromDef` for the annotated struct or enum.
 /// The def type (`FromDef::Def`) can be provided by the additional attribute
 /// `#[def_type(DefType)]`. If this attribute is omitted, a DefType is generated.
 ///
@@ -101,7 +101,7 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// It is possible to influence resolution and def type generation by using the
 /// `#[from_def(...)]` attribute on the fields directly:
 ///
-/// `#[from_def(default)]` will use the [`std::default::Default`] trait to construct a value, so
+/// `#[from_def(default)]` will use the [`Default`] trait to construct a value, so
 /// it omits the field in the generated def type and also skips resolution completely.
 ///
 /// `#[from_def_ault]` will use the [`std::default::Default`] trait to construct the value of the
@@ -121,10 +121,7 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Use `#[expose_resolver]` on a field to generate a function on the type containing the field
 /// which exposes the resolver. The name is derived from the field name (e.g.
 /// `MyAsset::foo_resolver()` for the field `foo`)
-#[proc_macro_derive(
-    FromDef,
-    attributes(def_type, from_def, from_def_ault, expose_resolver)
-)]
+#[proc_macro_derive(FromDef, attributes(def_type, elf))]
 pub fn from_def(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let asset_module = match CratePath::try_from(ELF_MODULE_PATH) {

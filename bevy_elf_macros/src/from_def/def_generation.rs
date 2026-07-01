@@ -98,8 +98,8 @@ fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
         Some(attr) if attr.omit_def_field() => {
             return Ok(None);
         }
-        Some(FieldAttr::FromDef { spec: Some(_), .. })
-        | Some(FieldAttr::FromDef {
+        Some(FieldAttr { spec: Some(_), .. })
+        | Some(FieldAttr {
             resolver: Some(_), ..
         }) => {
             let asset_module = CratePath::try_from(ELF_MODULE_PATH)?;

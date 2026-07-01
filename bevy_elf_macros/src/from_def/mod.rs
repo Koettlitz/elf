@@ -14,27 +14,29 @@ use crate::CratePath;
 use crate::ELF_MODULE_PATH;
 
 #[derive(Debug)]
-pub enum FieldAttr {
-    FromDef {
-        default: bool,
-        implicit: bool,
-        spec: Option<FieldSpec>,
-        resolver: Option<Expr>,
-    },
-    FromDefault,
+pub struct FieldAttr {
+    from_default: bool,
+    default: bool,
+    implicit: bool,
+    spec: Option<FieldSpec>,
+    resolver: Option<Expr>,
+    expose_resolver: bool,
 }
 
 impl Parse for FieldAttr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut implicit = false;
+        let mut from_default = false;
         let mut default = false;
+        let mut implicit = false;
         let mut spec: Option<FieldSpec> = None;
         let mut resolver: Option<Expr> = None;
+        let mut expose_resolver = false;
 
         while !input.is_empty() {
             let ident: Ident = input.parse()?;
 
             match ident.to_string().as_str() {
+                "from_default" => from_default = true,
                 "default" => default = true,
                 "implicit" => implicit = true,
                 "with_spec" => {
@@ -47,10 +49,11 @@ impl Parse for FieldAttr {
                     parenthesized!(resolver_expr in input);
                     resolver = Some(Expr::parse(&resolver_expr)?);
                 }
+                "expose_resolver" => expose_resolver = true,
                 _ => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "Unknown parameter. Expected `default`, `implicit`, `with_spec` or `with_resolver`",
+                        "Unknown parameter. Expected `from_default`, `default`, `implicit`, `with_spec`, `with_resolver` or `expose_resolver`",
                     ));
                 }
             }
@@ -60,11 +63,13 @@ impl Parse for FieldAttr {
             }
         }
 
-        Ok(Self::FromDef {
-            implicit,
+        Ok(Self {
+            from_default,
             default,
+            implicit,
             spec,
             resolver,
+            expose_resolver,
         })
     }
 }
@@ -72,45 +77,41 @@ impl Parse for FieldAttr {
 impl FieldAttr {
     pub fn parse<'a>(attrs: impl IntoIterator<Item = &'a Attribute>) -> syn::Result<Option<Self>> {
         let mut result = None;
-        let err = |attr: &Attribute| {
-            syn::Error::new(
-                attr.span(),
-                "only one `#[from_def]` or `#[from_def_ault]` attribute is allowed",
-            )
-        };
-
         for attr in attrs {
-            if attr.path().is_ident("from_def") {
+            if attr.path().is_ident("elf") {
                 if result.is_some() {
-                    return Err(err(attr));
+                    return Err(syn::Error::new(
+                        attr.span(),
+                        "only one of `from_default`, `default` or `implicit` is allowed",
+                    ));
                 }
                 let field_attr: Self = attr.parse_args()?;
                 field_attr.validate(attr.path().span())?;
                 result = Some(field_attr);
-            } else if attr.path().is_ident("from_def_ault") {
-                if result.is_some() {
-                    return Err(err(attr));
-                }
-                result = Some(Self::FromDefault);
             }
         }
         Ok(result)
     }
 
     fn validate(&self, span: Span) -> syn::Result<()> {
-        let Self::FromDef {
+        let Self {
+            from_default,
             default,
             implicit,
             spec,
             resolver,
-        } = self
-        else {
-            return Ok(());
-        };
-        if !default && !implicit && spec.is_none() && resolver.is_none() {
+            expose_resolver,
+        } = self;
+        if !from_default
+            && !default
+            && !implicit
+            && spec.is_none()
+            && resolver.is_none()
+            && !expose_resolver
+        {
             Err(syn::Error::new(
                 span,
-                "expected at least one of `implicit`, `default`, `with_spec` or `with_resolver`",
+                "expected at least one of `from_default`, `default`, `implicit`, `with_spec` or `with_resolver`",
             ))
         } else if *implicit && spec.as_ref().is_some_and(|spec| spec.extension.is_none()) {
             Err(syn::Error::new(
@@ -122,10 +123,11 @@ impl FieldAttr {
                 span,
                 "cannot use both `with_spec` and `with_resolver`",
             ))
-        } else if *default && (*implicit || spec.is_some() || resolver.is_some()) {
+        } else if (*from_default || *default) && (*implicit || spec.is_some() || resolver.is_some())
+        {
             Err(syn::Error::new(
                 span,
-                "`default` cannot be combined with other parameters",
+                "`from_default` and `default` cannot be combined with other parameters",
             ))
         } else {
             Ok(())
@@ -133,12 +135,7 @@ impl FieldAttr {
     }
 
     pub fn omit_def_field(&self) -> bool {
-        match self {
-            Self::FromDefault => true,
-            Self::FromDef {
-                default, implicit, ..
-            } => *default || *implicit,
-        }
+        self.from_default || self.default || self.implicit
     }
 }
 

@@ -223,47 +223,33 @@ fn process_field(
     field_access: impl ToTokens,
     ctx: &FromDefImplContext,
 ) -> Result<FieldResult, syn::Error> {
-    let from_def_attr = FieldAttr::parse(&field.attrs)?;
-    let resolver_expr = if let Some(field_spec) = from_def_attr.as_ref().and_then(|a| {
-        if let FieldAttr::FromDef { spec, .. } = a {
-            spec.as_ref()
-        } else {
-            None
-        }
-    }) {
+    let elf_attr = FieldAttr::parse(&field.attrs)?;
+    let resolver_expr = if let Some(field_spec) = elf_attr.as_ref().and_then(|a| a.spec.as_ref()) {
         Some(generate_resolver_from(&field.ty, field_spec, ctx)?)
     } else {
-        from_def_attr.as_ref().and_then(|a| {
-            if let FieldAttr::FromDef { resolver, .. } = a {
-                resolver.as_ref().map(|r| r.to_token_stream())
-            } else {
-                None
-            }
-        })
+        elf_attr
+            .as_ref()
+            .and_then(|a| a.resolver.as_ref().map(|r| r.to_token_stream()))
     };
 
     Ok(FieldResult {
-        def_field: if from_def_attr
-            .as_ref()
-            .is_some_and(|attr| attr.omit_def_field())
-        {
+        def_field: if elf_attr.as_ref().is_some_and(|attr| attr.omit_def_field()) {
             None
         } else {
             Some(artificial_field_ident.to_token_stream())
         },
         def_conversion: generate_field_conversion(
             field,
-            from_def_attr.as_ref(),
+            elf_attr.as_ref(),
             resolver_expr.as_ref(),
             field_access,
             ctx,
         )?,
-        resolver_fn: field
-            .attrs
-            .iter()
-            .any(|attr| attr.path().is_ident("expose_resolver"))
-            .then(|| {
-                generate_resolver_access(field, resolver_expr.as_ref(), artificial_field_ident)
+        resolver_fn: elf_attr
+            .and_then(|elf| {
+                elf.expose_resolver.then(|| {
+                    generate_resolver_access(field, resolver_expr.as_ref(), artificial_field_ident)
+                })
             })
             .transpose()?,
     })
@@ -283,16 +269,19 @@ fn generate_field_conversion(
     let field_ident = &field.ident;
     let ctx_var_ident = &ctx.load_context_var_ident;
 
-    if let Some(FieldAttr::FromDef { default: true, .. }) = from_def_attr {
+    if let Some(FieldAttr { default: true, .. }) = from_def_attr {
         return Ok(quote! {
             #field_ident #colon <#field_type as std::default::Default>::default()
         });
     }
-    let def_expr = if let Some(FieldAttr::FromDefault) = &from_def_attr {
+    let def_expr = if let Some(FieldAttr {
+        from_default: true, ..
+    }) = &from_def_attr
+    {
         quote! {
             <<#field_type as #asset_module::FromDef>::Def as std::default::Default>::default()
         }
-    } else if let Some(FieldAttr::FromDef { implicit: true, .. }) = &from_def_attr {
+    } else if let Some(FieldAttr { implicit: true, .. }) = &from_def_attr {
         quote! {
             #asset_module::extract_id_from(#ctx_var_ident.path().clone())
         }
