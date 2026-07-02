@@ -1,6 +1,6 @@
 //! This crate enables easy loading and resolving of assets, that reference other assets.
 //! ## Basic usage
-//! Let's say you have a animation asset water_animation.ron, which references its spritesheet:
+//! Let's say you have an animation asset `water_animation.ron`, which references its spritesheet:
 //! ```ron
 //! (
 //!     frames: [1, 2, 3,],
@@ -12,7 +12,7 @@
 //! )
 //! ```
 //! The corresponding struct would look something like this:
-//! ```
+//! ```ignore
 //! # use bevy::prelude::*;
 //! # use std::time::Duration;
 //! # use bevy_elf::FromDef;
@@ -22,11 +22,13 @@
 //!     frame_duration: Duration,
 //!     spritesheet: Handle<Spritesheet>,
 //! }
+//! # #[derive(Asset, TypePath)]
+//! # struct Spritesheet;
 //! ```
 //! The [`derive@FromDef`] derive macro generates a (de)serializable version of the struct as well as an
 //! implementation of the [`trait@FromDef`] trait, which converts it into your struct. The generated
 //! struct looks something like this:
-//! ```
+//! ```ignore
 //! # use std::time::Duration;
 //! # use serde::{Serialize, Deserialize};
 //! #[derive(Serialize, Deserialize)]
@@ -36,15 +38,24 @@
 //!     spritesheet: String,
 //! }
 //! ```
-//! Assets, that implement [`trait@FromDef`] can be loaded with the [`RonAssetLoader<A>`], which calls
+//! Assets, that implement [`trait@FromDef`] can be loaded with the [`RonAssetLoader`], which calls
 //! [`FromDef::from_def()`] to convert the raw deserialized structure into the runtime
-//! structure. To resolve the string names to into handles some meta data needs to be provided:
+//! structure. You can register the asset and the [`RonAssetLoader`] manually or just add the
+//! [`RonAssetPlugin`]:
+//! ```ignore
+//! app.add_plugins((
+//!     RonAssetPlugin::<AnimationAsset>::default(),
+//!     RonAssetPlugin::<Spritesheet>::default(),
+//! ));
 //! ```
+//! To resolve the string names into handles some metadata needs to be provided. Let's
+//! take the Spritesheet asset as an example:
+//! ```ignore
 //! # use bevy::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
-//! struct Spritesheet { /* Fields omitted */ }
+//! struct Spritesheet { /* fields omitted */ }
 //! ```
 //! With the [`asset_spec`] provided the spritesheet handles inside the `AnimationAsset` can now be
 //! resolved, e.g. the "water" spritesheet gets resolved into "spritesheets/water.ron".
@@ -52,23 +63,25 @@
 //! ## Resolving foreign types with `elf`
 //! Asset types you don't own cannot be annotated with attributes. Let's take a closer look at the
 //! Spritesheet asset:
-//! ```
+//! ```ignore
 //! # use bevy::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
 //! struct Spritesheet {
-//!     #[elf(with_spec(base_path = "images", extension = "png"))]
+//!     #[elf(with_spec(base_path = "spritesheets/images", extension = "png"))]
 //!     image: Handle<Image>,
 //!
-//!     #[elf(with_spec(base_path = "layouts", extension = "ron"))]
+//!     #[elf(with_spec(base_path = "spritesheets/layouts", extension = "ron"))]
 //!     layout: Handle<TextureAtlasLayout>,
 //! }
 //! ```
-//! Since [`Image`] and [`TextureAtlasLayout`] are not defined by you they cannot be resolved the
-//! same way, because they don't have an [`asset_spec`]. For these you can use the `elf` field attribute to
-//! tell `bevy_elf` how to resolve them.
-//! It is also possible to make asset references implicit by directory structure.
+//! Since `Image` and `TextureAtlasLayout` are not defined by you they cannot be resolved
+//! the same way, because they don't have an [`asset_spec`].
+//! For these you can use the `elf` field attribute to tell `bevy_elf` how to resolve them as shown above.
+//!
+//! ## Implicit fields
+//! It is also possible to make asset references implicit by their name.
 //! Imagine your assets are organized in the file system like this:
 //! ```text
 //! assets/
@@ -85,9 +98,9 @@
 //!         ├── water.ron
 //!         └── grass.ron
 //! ```
-//! ## Implicit fields
-//! Explicitly mentioning e.g. "water" everywhere is cumbersome. Make it implicit instead:
-//! ```
+//! Explicitly mentioning e.g. "water" everywhere is cumbersome. Make it implicit instead. The
+//! `implicit` flag goes along well with `sub_path`:
+//! ```ignore
 //! # use bevy::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
@@ -108,7 +121,7 @@
 //! file there for it all to work isn't nice at all! To omit the whole file tell `bevy_elf` to omit
 //! the def type entirely and use `()` instead. Just tell the referencing `AnimationAsset` to not
 //! load any file but put a default value into [`FromDef::from_def()`] instead:
-//! ```
+//! ```ignore
 //! # use bevy::prelude::*;
 //! # use std::time::Duration;
 //! # use bevy_elf::{FromDef, asset_spec};
@@ -121,19 +134,19 @@
 //!     spritesheet: Handle<Spritesheet>,
 //! }
 //!
-//! #[derive(FromDef, Asset, TypePath)]
+//! #[derive(FromDef)]
 //! #[def_type(())]
 //! struct Spritesheet {
-//!     #[elf(implicit, with_spec(sub_path = "images", extension = "png"))]
+//!     #[elf(implicit, with_spec(base_path = "images", extension = "png"))]
 //!     image: Handle<Image>,
 //!
-//!     #[elf(implicit, with_spec(sub_path = "layouts", extension = "ron"))]
+//!     #[elf(implicit, with_spec(base_path = "layouts", extension = "ron"))]
 //!     layout: Handle<TextureAtlasLayout>,
 //! }
 //! ```
-//! That way your directory structure becomes leaner and the spritesheet doesn't appear in the file
-//! system at all anymore. But the image and its layout are still neatly stored in their own
-//! struct.
+//! That way your directory structure, as well as the ron files themselves become leaner and
+//! the spritesheet doesn't appear in the file system at all anymore.
+//! But the image and its layout are still neatly stored in their own `Spritesheet` struct.
 //! ```text
 //! assets/
 //! ├── animations/
@@ -141,11 +154,16 @@
 //! │   └── grass.ron
 //! ├── images/
 //! │   ├── water.png
-//! │   └── grass.ron
+//! │   └── grass.png
 //! └── layouts/
 //!     ├── water.ron
 //!     └── grass.ron
 //! ```
+//! Note that since the spritesheets directory doesn't exist anymore, `images/` and `layouts/`
+//! move up to become top-level asset folders, so we changed from `sub_path` back to `base_path`.
+//! Also note, that Spritesheet is no `Asset` anymore, since it doesn't get loaded from a file,
+//! so the registration via `app.add_plugins(RonAssetPlugin::<Spritesheet>::default());` disappears as well.
+//!
 //! For more attributes and options see [`derive@FromDef`].
 
 #[cfg(feature = "macros")]
@@ -358,7 +376,7 @@ where
 /// An asset type implementing [`trait@FromDef`] can be loaded by the [`RonAssetLoader<A>`].
 /// It deserializes the asset bytes into the [`FromDef::Def`] type and then turns it into
 /// the runtime asset type implementing [`trait@FromDef`] by passing it to `A::from_def()`.
-/// This trait can be implemented manually or by using the derive macro [`macros::FromDef`].
+/// This trait can be implemented manually or by using the derive macro [`derive@FromDef`].
 /// To enable loading ron assets implementing [`trait@FromDef`] just add the [`RonAssetPlugin<A>`].
 pub trait FromDef {
     type Def: DeserializeOwned;
