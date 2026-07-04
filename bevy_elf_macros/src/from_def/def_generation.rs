@@ -1,15 +1,19 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    Data, DataEnum, DataStruct, DeriveInput, Field, Fields, Generics, Visibility, parse2,
-    punctuated::Punctuated, token::Comma,
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, Generics, Visibility,
+    parse2, punctuated::Punctuated, token::Comma,
 };
 
-use crate::{CratePath, ELF_MODULE_PATH, from_def::FieldAttr};
+use crate::{
+    CratePath, ELF_MODULE_PATH,
+    from_def::{FieldElfAttr, VariantElfAttr},
+};
 
 pub fn generate_def_for(
     derive_input: &DeriveInput,
     def_type: &syn::Type,
+    attrs: &[Attribute],
 ) -> Result<TokenStream, syn::Error> {
     let def_type_definition = match &derive_input.data {
         Data::Struct(input_struct) => generate_def_for_struct(
@@ -29,8 +33,13 @@ pub fn generate_def_for(
             "unions are not supported",
         )),
     }?;
+    let attrs = if attrs.is_empty() {
+        quote!(#[derive(serde::Serialize, serde::Deserialize)])
+    } else {
+        quote!(#(#attrs)*)
+    };
     Ok(quote! {
-        #[derive(serde::Serialize, serde::Deserialize)]
+        #attrs
         #def_type_definition
     })
 }
@@ -66,6 +75,11 @@ fn generate_def_for_enum(
 ) -> Result<TokenStream, syn::Error> {
     let mut variants = input_enum.variants.clone();
     for variant in &mut variants {
+        if let Some(VariantElfAttr(attrs)) = VariantElfAttr::from_attrs(&variant.attrs)? {
+            variant.attrs = attrs;
+        } else {
+            variant.attrs.clear();
+        };
         variant.fields = match variant.fields.clone() {
             Fields::Named(mut named) => {
                 named.named = generate_def_fields(named.named)?;
@@ -94,12 +108,13 @@ fn generate_def_fields(fields: Punctuated<Field, Comma>) -> syn::Result<Punctuat
 }
 
 fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
-    let from_def_trait = match FieldAttr::parse(&field.attrs)? {
+    let elf = FieldElfAttr::from_attrs(&field.attrs)?;
+    let from_def_trait = match elf {
         Some(attr) if attr.omit_def_field() => {
             return Ok(None);
         }
-        Some(FieldAttr { spec: Some(_), .. })
-        | Some(FieldAttr {
+        Some(FieldElfAttr { spec: Some(_), .. })
+        | Some(FieldElfAttr {
             resolver: Some(_), ..
         }) => {
             let asset_module = CratePath::try_from(ELF_MODULE_PATH)?;
@@ -111,7 +126,11 @@ fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
         }
     };
     let field_type = &field.ty;
-    field.attrs.clear();
+    if let Some(elf) = elf {
+        field.attrs = elf.def_attrs;
+    } else {
+        field.attrs.clear();
+    }
     field.ty = parse2(quote!(<#field_type as #from_def_trait>::Def))?;
     Ok(Some(field))
 }
@@ -135,7 +154,7 @@ mod test {
         .into();
         let derive_input: DeriveInput = parse2(input_struct).unwrap();
         let def_type = syn::parse_str("TestDef").unwrap();
-        let generated = generate_def_for(&derive_input, &def_type).unwrap();
+        let generated = generate_def_for(&derive_input, &def_type, &Vec::new()).unwrap();
         let expected = quote! {
             #[derive(serde::Serialize, serde::Deserialize)]
             struct TestDef<T: ops::Add> {

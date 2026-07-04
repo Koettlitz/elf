@@ -9,7 +9,7 @@ use syn::{
 
 use crate::{
     CratePath, ELF_MODULE_PATH,
-    from_def::{FieldAttr, FieldSpec, PathKind},
+    from_def::{FieldElfAttr, FieldSpec, PathKind},
 };
 
 struct FromDefImplContext {
@@ -223,7 +223,7 @@ fn process_field(
     field_access: impl ToTokens,
     ctx: &FromDefImplContext,
 ) -> Result<FieldResult, syn::Error> {
-    let elf_attr = FieldAttr::parse(&field.attrs)?;
+    let elf_attr = FieldElfAttr::from_attrs(&field.attrs)?;
     let resolver_expr = if let Some(field_spec) = elf_attr.as_ref().and_then(|a| a.spec.as_ref()) {
         Some(generate_resolver_from(&field.ty, field_spec, ctx)?)
     } else {
@@ -257,7 +257,7 @@ fn process_field(
 
 fn generate_field_conversion(
     field: &Field,
-    from_def_attr: Option<&FieldAttr>,
+    from_def_attr: Option<&FieldElfAttr>,
     resolver_expr: Option<&TokenStream>,
     field_access: impl ToTokens,
     ctx: &FromDefImplContext,
@@ -269,19 +269,19 @@ fn generate_field_conversion(
     let field_ident = &field.ident;
     let ctx_var_ident = &ctx.load_context_var_ident;
 
-    if let Some(FieldAttr { default: true, .. }) = from_def_attr {
+    if let Some(FieldElfAttr { default: true, .. }) = from_def_attr {
         return Ok(quote! {
             #field_ident #colon <#field_type as std::default::Default>::default()
         });
     }
-    let def_expr = if let Some(FieldAttr {
+    let def_expr = if let Some(FieldElfAttr {
         from_default: true, ..
     }) = &from_def_attr
     {
         quote! {
             <<#field_type as #asset_module::FromDef>::Def as std::default::Default>::default()
         }
-    } else if let Some(FieldAttr { implicit: true, .. }) = &from_def_attr {
+    } else if let Some(FieldElfAttr { implicit: true, .. }) = &from_def_attr {
         quote! {
             #asset_module::extract_id_from(#ctx_var_ident.path().clone())
         }

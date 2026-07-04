@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use proc_macro2::Ident;
 use proc_macro2::Span;
+use syn::Type;
 use syn::{Attribute, Expr, LitStr, Token, parenthesized, parse::Parse, spanned::Spanned};
 
 mod def_generation;
@@ -14,22 +15,196 @@ use crate::CratePath;
 use crate::ELF_MODULE_PATH;
 
 #[derive(Debug)]
-pub struct FieldAttr {
+pub enum TypeElfAttr {
+    DefType(Type),
+    DefAttrs(Vec<Attribute>),
+}
+
+impl TypeElfAttr {
+    pub fn from_attrs<'a>(
+        attrs: impl IntoIterator<Item = &'a Attribute>,
+    ) -> syn::Result<Option<Self>> {
+        let mut result = None;
+
+        for attr in attrs {
+            if attr.path().is_ident("elf") {
+                if result.is_some() {
+                    return Err(syn::Error::new(
+                        attr.span(),
+                        "only one `elf` attribute per type is allowed",
+                    ));
+                }
+                let elf: Self = attr.parse_args()?;
+                result = Some(elf);
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+impl Parse for TypeElfAttr {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut def_type: Option<Type> = None;
+        let mut def_attrs: Vec<Attribute> = Vec::new();
+
+        while !input.is_empty() {
+            let ident: Ident = input.parse()?;
+
+            match ident.to_string().as_str() {
+                "def_type" => {
+                    if def_type.is_some() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Only one `def_type` argument is allowed.",
+                        ));
+                    }
+                    if !def_attrs.is_empty() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Only one of `def_type` and `on_def` is allowed.",
+                        ));
+                    }
+                    let buf;
+                    parenthesized!(buf in input);
+                    def_type = Some(Type::parse(&buf)?)
+                }
+                "on_def" => {
+                    if !def_attrs.is_empty() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Only one `on_def` argument is allowed.",
+                        ));
+                    }
+                    if def_type.is_some() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Only one of `def_type` and `on_def` is allowed.",
+                        ));
+                    }
+                    let buf;
+                    parenthesized!(buf in input);
+                    def_attrs = Attribute::parse_outer(&buf)?;
+                }
+                other => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        format!("Unknown parameter `{other}`. Expected `def_type` or `on_def`."),
+                    ));
+                }
+            }
+            // optional trailing comma
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        if let Some(def_type) = def_type {
+            Ok(Self::DefType(def_type))
+        } else if !def_attrs.is_empty() {
+            Ok(Self::DefAttrs(def_attrs))
+        } else {
+            Err(syn::Error::new(
+                Span::call_site(),
+                "Empty `elf` attribute not allowed. Expected one of `def_type` or `on_def`.",
+            ))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldElfAttr {
     from_default: bool,
     default: bool,
     implicit: bool,
     spec: Option<FieldSpec>,
     resolver: Option<Expr>,
+    def_attrs: Vec<Attribute>,
     expose_resolver: bool,
 }
 
-impl Parse for FieldAttr {
+impl FieldElfAttr {
+    pub fn from_attrs<'a>(
+        attrs: impl IntoIterator<Item = &'a Attribute>,
+    ) -> syn::Result<Option<Self>> {
+        let mut result = None;
+        for attr in attrs {
+            if attr.path().is_ident("elf") {
+                if result.is_some() {
+                    return Err(syn::Error::new(
+                        attr.span(),
+                        "only one `elf` attribute per field is allowed",
+                    ));
+                }
+                let field_attr: Self = attr.parse_args()?;
+                field_attr.validate(attr.path().span())?;
+                result = Some(field_attr);
+            }
+        }
+        Ok(result)
+    }
+
+    fn validate(&self, span: Span) -> syn::Result<()> {
+        let Self {
+            from_default,
+            default,
+            implicit,
+            spec,
+            resolver,
+            def_attrs,
+            expose_resolver,
+        } = self;
+        if !from_default
+            && !default
+            && !implicit
+            && spec.is_none()
+            && resolver.is_none()
+            && def_attrs.is_empty()
+            && !expose_resolver
+        {
+            Err(syn::Error::new(
+                span,
+                "expected at least one of `from_default`, `default`, `implicit`, `with_spec`, `on_def` or `with_resolver`",
+            ))
+        } else if *implicit && spec.as_ref().is_some_and(|spec| spec.extension.is_none()) {
+            Err(syn::Error::new(
+                span,
+                "expected `extension` on implicit field",
+            ))
+        } else if spec.is_some() && resolver.is_some() {
+            Err(syn::Error::new(
+                span,
+                "cannot use both `with_spec` and `with_resolver`",
+            ))
+        } else if (*from_default || *default) && (*implicit || spec.is_some() || resolver.is_some())
+        {
+            Err(syn::Error::new(
+                span,
+                "`from_default` and `default` cannot be combined with other parameters",
+            ))
+        } else if self.omit_def_field() && !def_attrs.is_empty() {
+            Err(syn::Error::new(
+                span,
+                "`on_def` is not allowed when the field doesn't exist on the def type, due to `implicit`, `from_default` or `default`",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn omit_def_field(&self) -> bool {
+        self.from_default || self.default || self.implicit
+    }
+}
+
+impl Parse for FieldElfAttr {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut from_default = false;
         let mut default = false;
         let mut implicit = false;
         let mut spec: Option<FieldSpec> = None;
         let mut resolver: Option<Expr> = None;
+        let mut def_attrs: Vec<Attribute> = Vec::new();
         let mut expose_resolver = false;
 
         while !input.is_empty() {
@@ -49,11 +224,18 @@ impl Parse for FieldAttr {
                     parenthesized!(resolver_expr in input);
                     resolver = Some(Expr::parse(&resolver_expr)?);
                 }
+                "on_def" => {
+                    let buf;
+                    parenthesized!(buf in input);
+                    def_attrs = Attribute::parse_outer(&buf)?;
+                }
                 "expose_resolver" => expose_resolver = true,
-                _ => {
+                other => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "Unknown parameter. Expected `from_default`, `default`, `implicit`, `with_spec`, `with_resolver` or `expose_resolver`",
+                        format!(
+                            "Unknown parameter `{other}`. Expected `from_default`, `default`, `implicit`, `with_spec`, `with_resolver`, `on_def` or `expose_resolver`"
+                        ),
                     ));
                 }
             }
@@ -69,73 +251,9 @@ impl Parse for FieldAttr {
             implicit,
             spec,
             resolver,
+            def_attrs,
             expose_resolver,
         })
-    }
-}
-
-impl FieldAttr {
-    pub fn parse<'a>(attrs: impl IntoIterator<Item = &'a Attribute>) -> syn::Result<Option<Self>> {
-        let mut result = None;
-        for attr in attrs {
-            if attr.path().is_ident("elf") {
-                if result.is_some() {
-                    return Err(syn::Error::new(
-                        attr.span(),
-                        "only one of `from_default`, `default` or `implicit` is allowed",
-                    ));
-                }
-                let field_attr: Self = attr.parse_args()?;
-                field_attr.validate(attr.path().span())?;
-                result = Some(field_attr);
-            }
-        }
-        Ok(result)
-    }
-
-    fn validate(&self, span: Span) -> syn::Result<()> {
-        let Self {
-            from_default,
-            default,
-            implicit,
-            spec,
-            resolver,
-            expose_resolver,
-        } = self;
-        if !from_default
-            && !default
-            && !implicit
-            && spec.is_none()
-            && resolver.is_none()
-            && !expose_resolver
-        {
-            Err(syn::Error::new(
-                span,
-                "expected at least one of `from_default`, `default`, `implicit`, `with_spec` or `with_resolver`",
-            ))
-        } else if *implicit && spec.as_ref().is_some_and(|spec| spec.extension.is_none()) {
-            Err(syn::Error::new(
-                span,
-                "expected `extension` on implicit field",
-            ))
-        } else if spec.is_some() && resolver.is_some() {
-            Err(syn::Error::new(
-                span,
-                "cannot use both `with_spec` and `with_resolver`",
-            ))
-        } else if (*from_default || *default) && (*implicit || spec.is_some() || resolver.is_some())
-        {
-            Err(syn::Error::new(
-                span,
-                "`from_default` and `default` cannot be combined with other parameters",
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn omit_def_field(&self) -> bool {
-        self.from_default || self.default || self.implicit
     }
 }
 
@@ -229,6 +347,74 @@ impl Parse for FieldSpec {
             path_kind: path_kind.unwrap(),
             extension,
         })
+    }
+}
+
+pub struct VariantElfAttr(pub Vec<Attribute>);
+
+impl VariantElfAttr {
+    pub fn from_attrs<'a>(
+        attrs: impl IntoIterator<Item = &'a Attribute>,
+    ) -> syn::Result<Option<Self>> {
+        let mut result = None;
+
+        for attr in attrs {
+            if attr.path().is_ident("elf") {
+                if result.is_some() {
+                    return Err(syn::Error::new(
+                        attr.span(),
+                        "only one `elf` attribute per variant is allowed",
+                    ));
+                }
+                let elf: Self = attr.parse_args()?;
+                result = Some(elf);
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+impl Parse for VariantElfAttr {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut def_attrs: Vec<Attribute> = Vec::new();
+
+        while !input.is_empty() {
+            let ident: Ident = input.parse()?;
+
+            match ident.to_string().as_str() {
+                "on_def" => {
+                    if !def_attrs.is_empty() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "Only one `on_def` argument is allowed.",
+                        ));
+                    }
+                    let buf;
+                    parenthesized!(buf in input);
+                    def_attrs = Attribute::parse_outer(&buf)?;
+                }
+                other => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        format!("Unknown parameter `{other}`. Expected `on_def`."),
+                    ));
+                }
+            }
+            // optional trailing comma
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        if !def_attrs.is_empty() {
+            Ok(Self(def_attrs))
+        } else {
+            Err(syn::Error::new(
+                Span::call_site(),
+                "Empty `elf` attribute not allowed. Expected `on_def(#[...])`.",
+            ))
+        }
     }
 }
 
