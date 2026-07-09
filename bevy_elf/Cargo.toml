@@ -4,12 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["macros"]
-macros = ["bevy_elf_macros"]
+default = ["macros", "math"]
+macros = ["dep:bevy_elf_macros"]
+math = ["dep:bevy_math"]
+image = ["dep:bevy_image"]
 
 [dependencies]
 bevy_elf_macros = { version = "0.1", optional = true, path = "../bevy_elf_macros"}
-bevy = { version = "0.19", features = ["serialize"] }
+bevy_asset = "0.19"
+bevy_app = "0.19"
+bevy_reflect = "0.19"
+bevy_math = { version = "0.19", optional = true, features = ["serialize"] }
+bevy_image = { version = "0.19", optional = true, features = ["serialize"] }
 serde = "1.0"
 ron = "0.12"
 thiserror = "2.0"

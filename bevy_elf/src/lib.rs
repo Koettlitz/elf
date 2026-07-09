@@ -1,6 +1,15 @@
-//! This crate enables easy loading and resolving of assets, that reference other assets.
+//! This crate loads and resolves assets that reference other assets by name.
+//! It builds on [`serde`] and integrates into `bevy`'s asset ecosystem.
+//!
+//! Hand-written asset types use [`Handle`]s, which aren't serializable. This
+//! crate generates a serializable "Def" counterpart for each type, using plain
+//! strings in place of [`Handle`]s, along with a [`trait@FromDef`] impl that
+//! converts a Def back into its runtime type — resolving each string into a
+//! [`Handle`] along the way.
+//!
 //! ## Basic usage
-//! Let's say you have an animation asset `water_animation.ron`, which references its spritesheet:
+//! Let's say you have an animation asset `water_animation.ron`, which references its spritesheet
+//! by name:
 //! ```ron
 //! (
 //!     frames: [1, 2, 3,],
@@ -13,7 +22,7 @@
 //! ```
 //! The corresponding struct would look something like this:
 //! ```ignore
-//! # use bevy::prelude::*;
+//! # use bevy_asset::prelude::*;
 //! # use std::time::Duration;
 //! # use bevy_elf::FromDef;
 //! #[derive(FromDef, Asset, TypePath)]
@@ -43,6 +52,7 @@
 //! structure. You can register the asset and the [`RonAssetLoader`] manually or just add the
 //! [`RonAssetPlugin`]:
 //! ```ignore
+//! # use bevy_app::prelude::*;
 //! app.add_plugins((
 //!     RonAssetPlugin::<AnimationAsset>::default(),
 //!     RonAssetPlugin::<Spritesheet>::default(),
@@ -51,7 +61,7 @@
 //! To resolve the string names into handles some metadata needs to be provided. Let's
 //! take the Spritesheet asset as an example:
 //! ```ignore
-//! # use bevy::prelude::*;
+//! # use bevy_asset::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
@@ -64,7 +74,7 @@
 //! Asset types you don't own cannot be annotated with attributes. Let's take a closer look at the
 //! Spritesheet asset:
 //! ```ignore
-//! # use bevy::prelude::*;
+//! # use bevy_asset::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
@@ -101,7 +111,7 @@
 //! Explicitly mentioning e.g. "water" everywhere is cumbersome. Make it implicit instead. The
 //! `implicit` flag goes along well with `sub_path`:
 //! ```ignore
-//! # use bevy::prelude::*;
+//! # use bevy_asset::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
@@ -122,7 +132,8 @@
 //! the def type entirely and use `()` instead. Just tell the referencing `AnimationAsset` to not
 //! load any file but put a default value into [`FromDef::from_def()`] instead:
 //! ```ignore
-//! # use bevy::prelude::*;
+//! # use bevy_asset::prelude::*;
+//! # use bevy_app::prelude::*;
 //! # use std::time::Duration;
 //! # use bevy_elf::{FromDef, asset_spec};
 //! #[derive(FromDef, Asset, TypePath)]
@@ -177,53 +188,75 @@ use std::io;
 use std::marker::PhantomData;
 use std::time::Duration;
 
-use bevy::asset::io::Reader;
-use bevy::asset::{AssetLoader, AssetPath, LoadContext, ParseAssetPathError};
-use bevy::prelude::*;
+use bevy_app::prelude::*;
+
+use bevy_asset::io::Reader;
+use bevy_asset::prelude::*;
+use bevy_asset::{AssetLoader, AssetPath, LoadContext, ParseAssetPathError};
 use bevy_elf_macros::from_def_self;
+use bevy_reflect::TypePath;
 use ron::de::SpannedError;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
+
+mod types;
 
 type Phantom<L> = PhantomData<fn() -> L>;
 
 /// Resolves the [`AssetPath`] for a given string id.
 pub trait AssetResolver {
-    // TODO: error type sollte nicht FromDefError sein hier
-    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, FromDefError>;
+    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, ResolveError>;
 }
 
 /// Resolves the [`AssetPath`] for a given string asset id from a static context, meaning to self
 /// object is nessecary.
 pub trait StaticAssetResolver {
-    fn resolve(asset_id: &str) -> Result<AssetPath<'static>, FromDefError>;
+    fn resolve(asset_id: &str) -> Result<AssetPath<'static>, ResolveError>;
 }
 
 /// An asset resolver, that assumes the given string id is the complete asset path and returns it
-/// as an [`AssetPath`] unchanged.
+/// as an [`AssetPath`](`bevy_asset::AssetPath`) unchanged.
 pub struct PathResolver;
 impl AssetResolver for PathResolver {
-    fn resolve(&self, asset_path: &str) -> Result<AssetPath<'static>, FromDefError> {
+    fn resolve(&self, asset_path: &str) -> Result<AssetPath<'static>, ResolveError> {
         Ok(AssetPath::from(asset_path.to_string()))
     }
 }
 
-// Extracts the string id of the asset from its [`AssetPath`].
-pub fn extract_id_from(asset_path: AssetPath) -> String {
+/// Extracts the string id of the asset from its [`AssetPath`].
+pub fn extract_id_from(asset_path: AssetPath) -> Result<String, ResolveError> {
     asset_path
         .path()
         .file_prefix()
-        .unwrap_or_else(|| panic!("missing file name in asset path {asset_path}"))
-        .to_string_lossy()
-        .to_string()
+        .ok_or_else(|| ResolveError::MissingFileName(asset_path.clone_owned()))
+        .map(|v| v.to_string_lossy().to_string())
 }
 
 #[derive(Error, Debug)]
 pub enum FromDefError {
     #[error("{0}")]
-    Parse(#[from] ParseAssetPathError),
+    Resolve(#[from] ResolveError),
+
     #[error("{0}")]
     InvalidDef(String),
+}
+
+impl From<ParseAssetPathError> for FromDefError {
+    fn from(value: ParseAssetPathError) -> Self {
+        Self::from(ResolveError::from(value))
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ResolveError {
+    #[error("{0}")]
+    Parse(#[from] ParseAssetPathError),
+
+    #[error("missing file name in asset path {0}")]
+    MissingFileName(AssetPath<'static>),
+
+    #[error("invalid asset link \"{0}\"")]
+    InvalidAssetLink(String),
 }
 
 /// An adapter type, that implements [`AssetResolver`] by delegating to a [`StaticAssetResolver`] (`S`)
@@ -236,7 +269,7 @@ impl<S> Default for StaticResolverAdapter<S> {
 }
 
 impl<S: StaticAssetResolver> AssetResolver for StaticResolverAdapter<S> {
-    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, FromDefError> {
+    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, ResolveError> {
         S::resolve(asset_id)
     }
 }
@@ -361,7 +394,7 @@ impl<T> AssetResolver for T
 where
     T: AssetPathSpecProvider,
 {
-    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, FromDefError> {
+    fn resolve(&self, asset_id: &str) -> Result<AssetPath<'static>, ResolveError> {
         let file_name = if let Some(ext) = self.extension() {
             Cow::Owned(asset_id.to_string() + "." + ext)
         } else {
@@ -373,14 +406,14 @@ where
 }
 
 /// Represents a type, that can be constructed from a deserializable def type.
-/// An asset type implementing [`trait@FromDef`] can be loaded by the [`RonAssetLoader<A>`].
+/// An asset type implementing [`trait@FromDef`] can be loaded by the [`RonAssetLoader`].
 /// It deserializes the asset bytes into the [`FromDef::Def`] type and then turns it into
-/// the runtime asset type implementing [`trait@FromDef`] by passing it to `A::from_def()`.
+/// the runtime asset type which implements [`trait@FromDef`] by passing it to [`FromDef::from_def()`].
 /// This trait can be implemented manually or by using the derive macro [`derive@FromDef`].
-/// To enable loading ron assets implementing [`trait@FromDef`] just add the [`RonAssetPlugin<A>`].
+/// To enable loading ron assets implementing [`trait@FromDef`] just add the [`RonAssetPlugin`].
 pub trait FromDef {
     type Def: DeserializeOwned;
-    type Error: Into<FromDefError>;
+    type Error;
 
     fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error>
     where
@@ -390,7 +423,7 @@ pub trait FromDef {
 /// Like [`trait@FromDef`], but uses an explicitly passed [`AssetResolver`] to resolve its [`AssetPath`].
 pub trait FromDefWithResolver {
     type Def: DeserializeOwned;
-    type Error: Into<FromDefError>;
+    type Error;
 
     fn from_def_with_resolver<R: AssetResolver>(
         def: Self::Def,
@@ -424,7 +457,7 @@ impl<A: Asset> AssetRef<A> {
 
 impl<A: Asset + HasResolver> FromDef for AssetRef<A> {
     type Def = String;
-    type Error = FromDefError;
+    type Error = ResolveError;
 
     fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error>
     where
@@ -437,7 +470,7 @@ impl<A: Asset + HasResolver> FromDef for AssetRef<A> {
 
 impl<A: Asset> FromDefWithResolver for AssetRef<A> {
     type Def = String;
-    type Error = FromDefError;
+    type Error = ResolveError;
 
     fn from_def_with_resolver<R: AssetResolver>(
         def: Self::Def,
@@ -453,7 +486,7 @@ impl<A: Asset> FromDefWithResolver for AssetRef<A> {
 
 impl<A: Asset + HasResolver> FromDef for Handle<A> {
     type Def = String;
-    type Error = FromDefError;
+    type Error = ResolveError;
 
     fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error> {
         Ok(ctx.load(A::resolver().resolve(&def)?))
@@ -588,16 +621,13 @@ from_def_self![
     f32,
     f64,
     String,
-    IRect,
-    IVec2,
-    UVec2,
-    Vec2,
-    Vec3,
-    TextureAtlasLayout,
     Duration,
 ];
 
 /// Registers the asset type `A` and a [`RonAssetLoader<A>`]
+/// This is equivalent to calling
+/// `app.init_asset::<A>().init_asset_loader::<RonAssetLoader<A>>();`
+/// Note that the asset type `A` has to implement [`Asset`] and [`FromDef`].
 pub struct RonAssetPlugin<A>(Phantom<A>);
 impl<A> Default for RonAssetPlugin<A> {
     fn default() -> Self {

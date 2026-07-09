@@ -283,7 +283,7 @@ fn generate_field_conversion(
         }
     } else if let Some(FieldElfAttr { implicit: true, .. }) = &from_def_attr {
         quote! {
-            #asset_module::extract_id_from(#ctx_var_ident.path().clone())
+            #asset_module::extract_id_from(#ctx_var_ident.path().clone())?
         }
     } else {
         field_access.to_token_stream()

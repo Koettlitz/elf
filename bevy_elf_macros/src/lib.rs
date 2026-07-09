@@ -275,7 +275,7 @@ pub fn from_def(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn from_def_self(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input with Punctuated<Type, Token![,]>::parse_terminated);
-    let bevy_crate = match resolve_crate_name("bevy") {
+    let bevy_crate = match resolve_crate_name("bevy_asset") {
         Ok(c) => c,
         Err(e) => return e.to_compile_error().into(),
     };
@@ -296,7 +296,7 @@ pub fn from_def_self(input: TokenStream) -> TokenStream {
 
                 fn from_def(
                     def: Self::Def,
-                    _: &mut #bevy_crate::asset::LoadContext<'_>,
+                    _: &mut #bevy_crate::LoadContext<'_>,
                 ) -> Result<Self, Self::Error> {
                     Ok(def)
                 }
