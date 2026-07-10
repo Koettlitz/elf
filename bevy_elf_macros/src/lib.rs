@@ -9,8 +9,8 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use quote::{ToTokens, quote};
 use syn::{
-    DeriveInput, Ident, Item, ItemEnum, ItemStruct, Token, Type, TypePath, parse_macro_input,
-    punctuated::Punctuated, spanned::Spanned,
+    DeriveInput, Ident, Item, ItemEnum, ItemStruct, TypePath, parse_macro_input,
+    spanned::Spanned,
 };
 
 use crate::{
@@ -268,45 +268,6 @@ pub fn from_def(item: TokenStream) -> TokenStream {
         }
 
         #resolver_fns
-    }
-    .into()
-}
-
-#[proc_macro]
-pub fn from_def_self(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input with Punctuated<Type, Token![,]>::parse_terminated);
-    let bevy_crate = match resolve_crate_name("bevy_asset") {
-        Ok(c) => c,
-        Err(e) => return e.to_compile_error().into(),
-    };
-    let from_def_trait = match from_def_trait() {
-        Ok(from_def_trait) => from_def_trait,
-        Err(e) => return e.into_compile_error().into(),
-    };
-    let asset_module = match CratePath::try_from(ELF_MODULE_PATH) {
-        Ok(asset_module) => asset_module,
-        Err(e) => return e.into_compile_error().into(),
-    };
-    let mut impls = Vec::with_capacity(input.len());
-    for ident in input {
-        let impl_block = quote! {
-            impl #from_def_trait for #ident {
-                type Def = Self;
-                type Error = #asset_module::FromDefError;
-
-                fn from_def(
-                    def: Self::Def,
-                    _: &mut #bevy_crate::LoadContext<'_>,
-                ) -> Result<Self, Self::Error> {
-                    Ok(def)
-                }
-            }
-        };
-        impls.push(impl_block);
-    }
-
-    quote! {
-        #(#impls)*
     }
     .into()
 }

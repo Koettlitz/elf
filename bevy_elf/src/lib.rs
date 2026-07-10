@@ -186,20 +186,18 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::io;
 use std::marker::PhantomData;
-use std::time::Duration;
 
 use bevy_app::prelude::*;
 
 use bevy_asset::io::Reader;
 use bevy_asset::prelude::*;
 use bevy_asset::{AssetLoader, AssetPath, LoadContext, ParseAssetPathError};
-use bevy_elf_macros::from_def_self;
 use bevy_reflect::TypePath;
 use ron::de::SpannedError;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-mod types;
+mod from_def_impls;
 
 type Phantom<L> = PhantomData<fn() -> L>;
 
@@ -259,7 +257,8 @@ pub enum ResolveError {
     InvalidAssetLink(String),
 }
 
-/// An adapter type, that implements [`AssetResolver`] by delegating to a [`StaticAssetResolver`] (`S`)
+/// An adapter type, that implements [`AssetResolver`] by delegating to a
+/// [`StaticAssetResolver`] (`S`)
 pub struct StaticResolverAdapter<S>(Phantom<S>);
 
 impl<S> Default for StaticResolverAdapter<S> {
@@ -605,24 +604,6 @@ where
             .collect()
     }
 }
-
-from_def_self![
-    (),
-    u8,
-    u16,
-    u32,
-    u64,
-    usize,
-    i8,
-    i16,
-    i32,
-    i64,
-    isize,
-    f32,
-    f64,
-    String,
-    Duration,
-];
 
 /// Registers the asset type `A` and a [`RonAssetLoader<A>`]
 /// This is equivalent to calling
