@@ -716,6 +716,7 @@ where
 /// This is equivalent to calling
 /// `app.init_asset::<A>().init_asset_loader::<RonAssetLoader<A>>();`
 /// Note that the asset type `A` has to implement [`Asset`] and [`FromDef`].
+#[cfg(feature = "app")]
 pub struct RonAssetPlugin<A>(Phantom<A>);
 impl<A> Default for RonAssetPlugin<A> {
     fn default() -> Self {
@@ -723,6 +724,7 @@ impl<A> Default for RonAssetPlugin<A> {
     }
 }
 
+#[cfg(feature = "app")]
 impl<A> Plugin for RonAssetPlugin<A>
 where
     A: Asset + FromDef + 'static,

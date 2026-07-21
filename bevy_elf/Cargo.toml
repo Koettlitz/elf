@@ -10,7 +10,8 @@ keywords = ["bevy", "asset", "handles"]
 categories = ["game-development"]
 
 [features]
-default = ["macros", "math"]
+default = ["macros", "math", "app"]
+app = ["dep:bevy_app"]
 macros = ["dep:bevy_elf_macros"]
 math = ["dep:bevy_math"]
 image = ["dep:bevy_image"]
@@ -18,7 +19,7 @@ image = ["dep:bevy_image"]
 [dependencies]
 bevy_elf_macros = { version = "0.0.1", optional = true, path = "../bevy_elf_macros"}
 bevy_asset = "0.19"
-bevy_app = "0.19"
+bevy_app = { version = "0.19", optional = true }
 bevy_reflect = "0.19"
 bevy_math = { version = "0.19", optional = true, features = ["serialize"] }
 bevy_image = { version = "0.19", optional = true, features = ["serialize"] }
