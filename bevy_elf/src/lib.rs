@@ -23,16 +23,19 @@
 //! The corresponding struct would look something like this:
 //! ```ignore
 //! # use bevy_asset::prelude::*;
-//! # use std::time::Duration;
 //! # use bevy_elf::FromDef;
+//! # use bevy_reflect::TypePath;
+//! # use std::time::Duration;
+//!
 //! #[derive(FromDef, Asset, TypePath)]
 //! struct AnimationAsset {
 //!     frames: Vec<usize>,
 //!     frame_duration: Duration,
 //!     spritesheet: Handle<Spritesheet>,
 //! }
-//! # #[derive(Asset, TypePath)]
-//! # struct Spritesheet;
+//!
+//! #[derive(Asset, TypePath)]
+//! struct Spritesheet;
 //! ```
 //! The [`derive@FromDef`] derive macro generates a (de)serializable version of the struct as well as an
 //! implementation of the [`trait@FromDef`] trait, which converts it into your struct. The generated
@@ -53,6 +56,7 @@
 //! [`RonAssetPlugin`]:
 //! ```ignore
 //! # use bevy_app::prelude::*;
+//! # use bevy_elf::RonAssetPlugin;
 //! app.add_plugins((
 //!     RonAssetPlugin::<AnimationAsset>::default(),
 //!     RonAssetPlugin::<Spritesheet>::default(),
@@ -76,6 +80,8 @@
 //! ```ignore
 //! # use bevy_asset::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
+//! # use bevy_image::{Image, TextureAtlasLayout};
+//! # use bevy_reflect::TypePath;
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
 //! struct Spritesheet {
@@ -113,6 +119,8 @@
 //! ```ignore
 //! # use bevy_asset::prelude::*;
 //! # use bevy_elf::{FromDef, asset_spec};
+//! # use bevy_image::{Image, TextureAtlasLayout};
+//! # use bevy_reflect::TypePath;
 //! #[derive(FromDef, Asset, TypePath)]
 //! #[asset_spec(base_path = "spritesheets", extension = "ron")]
 //! struct Spritesheet {
@@ -133,9 +141,10 @@
 //! load any file but put a default value into [`FromDef::from_def()`] instead:
 //! ```ignore
 //! # use bevy_asset::prelude::*;
-//! # use bevy_app::prelude::*;
 //! # use std::time::Duration;
-//! # use bevy_elf::{FromDef, asset_spec};
+//! # use bevy_elf::FromDef;
+//! # use bevy_image::{Image, TextureAtlasLayout};
+//! # use bevy_reflect::TypePath;
 //! #[derive(FromDef, Asset, TypePath)]
 //! struct AnimationAsset {
 //!     frames: Vec<usize>,
@@ -146,7 +155,7 @@
 //! }
 //!
 //! #[derive(FromDef)]
-//! #[def_type(())]
+//! #[elf(def_type(()))]
 //! struct Spritesheet {
 //!     #[elf(implicit, with_spec(base_path = "images", extension = "png"))]
 //!     image: Handle<Image>,
