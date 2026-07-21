@@ -1,10 +1,12 @@
 [package]
 name = "bevy_elf"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Serializable Bevy asset definitions that resolve string references into Handles"
+keywords = ["bevy", "asset", "handles"]
+categories = ["game-development"]
 
 [features]
 default = ["macros", "math"]
@@ -13,7 +15,7 @@ math = ["dep:bevy_math"]
 image = ["dep:bevy_image"]
 
 [dependencies]
-bevy_elf_macros = { version = "0.1", optional = true, path = "../bevy_elf_macros"}
+bevy_elf_macros = { version = "0.0.1", optional = true, path = "../bevy_elf_macros"}
 bevy_asset = "0.19"
 bevy_app = "0.19"
 bevy_reflect = "0.19"
@@ -24,6 +26,6 @@ ron = "0.12"
 thiserror = "2.0"
 
 [dev-dependencies]
-bevy_app = "0.19.0"
+bevy_app = "0.19"
 bevy_asset = "0.19"
-bevy_image = "0.19.0"
+bevy_image = "0.19"
