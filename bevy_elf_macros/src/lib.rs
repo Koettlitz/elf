@@ -357,7 +357,9 @@ fn resolve_crate_name(orig_name: &str) -> syn::Result<proc_macro2::TokenStream> 
 
 fn is_self(ty: &syn::Type) -> bool {
     match ty {
-        syn::Type::Path(TypePath { qself: None, path }) => path.is_ident("Self"),
+        syn::Type::Path(TypePath {
+            qself: None, path, ..
+        }) => path.is_ident("Self"),
         _ => false,
     }
 }
