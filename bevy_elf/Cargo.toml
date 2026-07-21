@@ -2,6 +2,7 @@
 name = "bevy_elf"
 version = "0.0.1"
 edition = "2024"
+repository = "https://github.com/Koettlitz/elf"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Serializable Bevy asset definitions that resolve string references into Handles"
