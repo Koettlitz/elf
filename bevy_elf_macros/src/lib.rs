@@ -25,9 +25,6 @@ mod spec;
 
 const ELF_MODULE_PATH: &str = "bevy_elf";
 
-/// Generates an implementation of `AssetPathSpec` and `HasResolver` for the annotated struct or
-/// enum. This enables this asset to be resolved from a file name prefix when used as a field
-/// of a type implementing `FromDef`.
 #[proc_macro_attribute]
 pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = match syn::parse(item.clone()) {
@@ -83,92 +80,7 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements the trait `FromDef` for the annotated struct or enum, by converting all
-/// contained fields via their `FromDef::from_def()` implementation. So all fields have to
-/// implement `FromDef`.
-/// All primitive types, container types like [`Option`], [`Vec`] and
-/// [`HashMap`](std::collections::HashMap), as well as `Handle` and `AssetRef` implement `FromDef`.
-///
-/// The def type (`FromDef::Def`) can be provided by the additional attribute
-/// `#[elf(def_type(DefType))]`.
-///
-/// There are the following ways to specify the def_type:
-/// 1. `#[elf(def_type(Self))]` where no conversion is necessary, because the serializable type is
-///    also the runtime type. `from_def()` just returns `Self` as is.
-/// 2. `#[elf(def_type(CustomType))]` to provide a custom serializable def type to be used.
-///    That type needs to have a corresponding field with the same name for each field in `Self`
-///    that should be converted and each such field must implement FromDef.
-///    The field types must match the corresponding field's type in `Self` in terms
-///    of its `FromDef::Def` type.
-/// 3. `#[elf(def_type(()))]` - use this when the type has no fields that need serialization.
-/// 4. If the additional `#[elf(def_type)]` attribute is omitted this macro generates a
-///    def type.
-///
-/// It is possible to influence resolution and def type generation by using the
-/// `#[elf(...)]` attribute on the fields directly:
-///
-/// `#[elf(with_spec(base_path = "base/path", extension = "ron"))]` overrides the `asset_spec` of the field's
-/// type used for resolution. This is only relevant for types like `bevy::asset::Handle` or `AssetRef`.
-/// The optional extension parameter is used for suffixing the file extension to the id, so in the ron file
-/// writing just "water" is enough to reference something at `assets/tiles/water.ron`. If you have
-/// multiple extensions for the same asset type (e.g. png and jpg) omit the extension parameter in
-/// the `#[elf(with_spec(...))]`, but then you have to specify the extension in the ron file, e.g.
-/// "water.png".
-///
-/// As an alternative to specifying a `base_path` you can use
-/// `#[elf(with_spec(sub_path = "foo"))]` to make the field resolve relative
-/// to the current path (the `base_path` used to resolve the containing type).
-///
-/// `#[elf(with_resolver(CustomResolver))]` can be used to specify a custom type that implements
-/// `AssetResolver`, which is used to resolve the asset path from the string id.
-///
-/// `#[elf(implicit)]` will omit the field in the generated def type and use the same id
-/// as the parent (containing asset) to resolve the file name.
-/// The `implicit` option can be combined freely with `with_spec`. Note that if the parent's
-/// resolver has an extension configured, the inherited id has no extension, so the extension
-/// parameter must be specified here. If the parent's resolver has no extension configured,
-/// the id must include the extension explicitly, and this field's extension must match the parent's.
-/// If you want implicit extensions and support multiple different extensions for the same asset
-/// type you can provide a custom `AssetResolver` via `#[elf(with_resolver(CustomResolver))]`.
-///
-/// `#[elf(default)]` will use the [`Default`](`std::default::Default`) trait to construct a value, so
-/// it omits the field in the generated def type and also skips resolution completely.
-///
-/// `#[elf(from_default)]` will use the [`Default`](`std::default::Default`) trait to construct the value of the
-/// field's def type, so it omits the field in the generated def type and passes the default value
-/// to the field type's `from_def` method.
-///
-/// `#[elf(on_def(#[...]))]` can be used on the type itself, on a variant or on a field to forward
-/// the given attribute to the same place on the def type. Note that without `#[elf(on_def(#[...]))]`
-/// the derive macros serde::Serialize and serde::Deserialize are hung onto the def type
-/// automatically. When using `#[elf(on_def(#[...]))]` you have to specify them yourself.
-///
-/// Use `#[elf(expose_resolver)]` on a field to generate a function on the type containing the field
-/// which exposes the resolver. The name is derived from the field name (e.g.
-/// `MyAsset::foo_resolver()` for the field `foo`).
-///
-/// # Example
-/// ```ignore
-/// #[derive(FromDef, Asset, TypePath)]
-/// struct Spritesheet {
-///     #[elf(implicit, with_spec(sub_path = "image", extension = "png"))]
-///     image: Handle<Image>,
-///
-///     #[elf(implicit, with_spec(sub_path = "layout", extension = "tl.ron"))]
-///     spritesheet_layout: Handle<TextureAtlasLayout>,
-///     kind: SpritesheetKind,
-/// }
-///
-/// #[derive(FromDef)]
-/// enum SpritesheetKind {
-///     Static(usize),
-///     Animated(
-///         #[elf(with_spec(base_path = "animations", extension = "ani.ron"))]
-///         Handle<SpriteAnimationAsset>,
-///     ),
-/// }
-/// ```
-#[proc_macro_derive(FromDef, attributes(def_type, elf))]
+#[proc_macro_derive(FromDef, attributes(elf))]
 pub fn from_def(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let elf_crate_path = match CratePath::try_from(ELF_MODULE_PATH) {
