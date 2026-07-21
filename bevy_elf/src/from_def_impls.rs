@@ -3,12 +3,11 @@ macro_rules! from_def_self {
         $(
             impl $crate::FromDef for $ty {
                 type Def = Self;
-                type Error = $crate::FromDefError;
 
                 fn from_def(
                     def: Self::Def,
                     _: &mut bevy_asset::LoadContext<'_>,
-                ) -> Result<Self, Self::Error> {
+                ) -> Result<Self, crate::FromDefError> {
                     Ok(def)
                 }
             }

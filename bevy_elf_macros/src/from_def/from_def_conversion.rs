@@ -357,7 +357,8 @@ fn generate_resolver_from(
             let asset_type = extract_asset_type(field_type).ok_or_else(|| {
                 syn::Error::new(
                     field_type.span(),
-                    format!("`subpath` only allowed for types, that contain a bevy::asset::Handle"),
+                    "`sub_path` only allowed for types, that contain a `bevy_asset::Handle`"
+                        .to_owned(),
                 )
             })?;
             let (sub_path, extension) = sub_path
@@ -405,11 +406,11 @@ fn extract_asset_type(field_type: &syn::Type) -> Option<&syn::Type> {
         return None;
     };
     if last_segment.ident == "Handle" || last_segment.ident == "AssetRef" {
-        return if let GenericArgument::Type(asset_type) = args.first()? {
+        if let GenericArgument::Type(asset_type) = args.first()? {
             Some(asset_type)
         } else {
             None
-        };
+        }
     } else {
         for generic_arg in args {
             if let GenericArgument::Type(inner) = generic_arg {

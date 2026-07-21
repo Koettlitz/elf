@@ -16,7 +16,7 @@ use crate::ELF_MODULE_PATH;
 
 #[derive(Debug)]
 pub enum TypeElfAttr {
-    DefType(Type),
+    DefType(Box<Type>),
     DefAttrs(Vec<Attribute>),
 }
 
@@ -100,7 +100,7 @@ impl Parse for TypeElfAttr {
         }
 
         if let Some(def_type) = def_type {
-            Ok(Self::DefType(def_type))
+            Ok(Self::DefType(Box::new(def_type)))
         } else if !def_attrs.is_empty() {
             Ok(Self::DefAttrs(def_attrs))
         } else {

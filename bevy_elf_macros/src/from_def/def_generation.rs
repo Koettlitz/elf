@@ -19,13 +19,13 @@ pub fn generate_def_for(
         Data::Struct(input_struct) => generate_def_for_struct(
             input_struct,
             &derive_input.vis,
-            &def_type,
+            def_type,
             &derive_input.generics,
         ),
         Data::Enum(input_enum) => generate_def_for_enum(
-            &input_enum,
+            input_enum,
             &derive_input.vis,
-            &def_type,
+            def_type,
             &derive_input.generics,
         ),
         Data::Union(_) => Err(syn::Error::new_spanned(
@@ -150,8 +150,7 @@ mod test {
                 handle: Handle<HurensohnAsset<'_>>,
                 nested: Vec<Rc<RefCell<Handle<T::Output>>>>,
             }
-        }
-        .into();
+        };
         let derive_input: DeriveInput = parse2(input_struct).unwrap();
         let def_type = syn::parse_str("TestDef").unwrap();
         let generated = generate_def_for(&derive_input, &def_type, &Vec::new()).unwrap();

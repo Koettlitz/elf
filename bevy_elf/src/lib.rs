@@ -263,7 +263,7 @@ pub struct StaticResolverAdapter<S>(Phantom<S>);
 
 impl<S> Default for StaticResolverAdapter<S> {
     fn default() -> Self {
-        Self(PhantomData::default())
+        Self(PhantomData)
     }
 }
 
@@ -297,7 +297,7 @@ pub struct ResolverSpec<S>(Phantom<S>);
 
 impl<S> Default for ResolverSpec<S> {
     fn default() -> Self {
-        Self(PhantomData::default())
+        Self(PhantomData)
     }
 }
 
@@ -350,7 +350,7 @@ pub struct SpecResolver<S>(Phantom<S>);
 
 impl<S> Default for SpecResolver<S> {
     fn default() -> Self {
-        Self(PhantomData::default())
+        Self(PhantomData)
     }
 }
 
@@ -412,9 +412,8 @@ where
 /// To enable loading ron assets implementing [`trait@FromDef`] just add the [`RonAssetPlugin`].
 pub trait FromDef {
     type Def: DeserializeOwned;
-    type Error;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error>
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError>
     where
         Self: Sized;
 }
@@ -456,9 +455,8 @@ impl<A: Asset> AssetRef<A> {
 
 impl<A: Asset + HasResolver> FromDef for AssetRef<A> {
     type Def = String;
-    type Error = ResolveError;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error>
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError>
     where
         Self: Sized,
     {
@@ -485,9 +483,8 @@ impl<A: Asset> FromDefWithResolver for AssetRef<A> {
 
 impl<A: Asset + HasResolver> FromDef for Handle<A> {
     type Def = String;
-    type Error = ResolveError;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error> {
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError> {
         Ok(ctx.load(A::resolver().resolve(&def)?))
     }
 }
@@ -511,10 +508,9 @@ where
     D: DeserializeOwned,
 {
     type Def = Option<D>;
-    type Error = T::Error;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error> {
-        Ok(def.map(|d| T::from_def(d, ctx)).transpose()?)
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError> {
+        def.map(|d| T::from_def(d, ctx)).transpose()
     }
 }
 
@@ -531,9 +527,8 @@ where
         resolver: &R,
         ctx: &mut LoadContext,
     ) -> Result<Self, Self::Error> {
-        Ok(def
-            .map(|d| T::from_def_with_resolver(d, resolver, ctx))
-            .transpose()?)
+        def.map(|d| T::from_def_with_resolver(d, resolver, ctx))
+            .transpose()
     }
 }
 
@@ -543,9 +538,8 @@ where
     D: DeserializeOwned,
 {
     type Def = Vec<D>;
-    type Error = T::Error;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error> {
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError> {
         def.into_iter().map(|d| T::from_def(d, ctx)).collect()
     }
 }
@@ -576,9 +570,8 @@ where
     D: DeserializeOwned,
 {
     type Def = HashMap<K, D>;
-    type Error = A::Error;
 
-    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, Self::Error> {
+    fn from_def(def: Self::Def, ctx: &mut LoadContext) -> Result<Self, FromDefError> {
         def.into_iter()
             .map(|(k, d)| Ok((k, A::from_def(d, ctx)?)))
             .collect()
@@ -612,14 +605,13 @@ where
 pub struct RonAssetPlugin<A>(Phantom<A>);
 impl<A> Default for RonAssetPlugin<A> {
     fn default() -> Self {
-        Self(PhantomData::default())
+        Self(PhantomData)
     }
 }
 
 impl<A> Plugin for RonAssetPlugin<A>
 where
     A: Asset + FromDef + 'static,
-    RonAssetLoadError: From<<A as FromDef>::Error>,
 {
     fn build(&self, app: &mut App) {
         app.init_asset::<A>()
@@ -634,7 +626,6 @@ pub struct RonAssetLoader<A>(Phantom<A>);
 impl<A> AssetLoader for RonAssetLoader<A>
 where
     A: FromDef + Asset,
-    RonAssetLoadError: From<<A as FromDef>::Error>,
 {
     type Asset = A;
     type Error = RonAssetLoadError;
@@ -655,7 +646,7 @@ where
 
 impl<A> Default for RonAssetLoader<A> {
     fn default() -> Self {
-        Self(PhantomData::default())
+        Self(PhantomData)
     }
 }
 

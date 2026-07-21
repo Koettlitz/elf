@@ -9,8 +9,7 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use quote::{ToTokens, quote};
 use syn::{
-    DeriveInput, Ident, Item, ItemEnum, ItemStruct, TypePath, parse_macro_input,
-    spanned::Spanned,
+    DeriveInput, Ident, Item, ItemEnum, ItemStruct, TypePath, parse_macro_input, spanned::Spanned,
 };
 
 use crate::{
@@ -24,7 +23,7 @@ use crate::{
 mod from_def;
 mod spec;
 
-const ELF_MODULE_PATH: &'static str = "bevy_elf";
+const ELF_MODULE_PATH: &str = "bevy_elf";
 
 /// Generates an implementation of `AssetPathSpec` and `HasResolver` for the annotated struct or
 /// enum. This enables this asset to be resolved from a file name prefix when used as a field
@@ -95,15 +94,15 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// There are the following ways to specify the def_type:
 /// 1. `#[elf(def_type(Self))]` where no conversion is necessary, because the serializable type is
-/// also the runtime type. `from_def()` just returns `Self` as is.
+///    also the runtime type. `from_def()` just returns `Self` as is.
 /// 2. `#[elf(def_type(CustomType))]` to provide a custom serializable def type to be used.
-/// That type needs to have a corresponding field with the same name for each field in `Self`
-/// that should be converted and each such field must implement FromDef.
-/// The field types must match the corresponding field's type in `Self` in terms
-/// of its `FromDef::Def` type.
+///    That type needs to have a corresponding field with the same name for each field in `Self`
+///    that should be converted and each such field must implement FromDef.
+///    The field types must match the corresponding field's type in `Self` in terms
+///    of its `FromDef::Def` type.
 /// 3. `#[elf(def_type(()))]` - use this when the type has no fields that need serialization.
 /// 4. If the additional `#[elf(def_type)]` attribute is omitted this macro generates a
-/// def type.
+///    def type.
 ///
 /// It is possible to influence resolution and def type generation by using the
 /// `#[elf(...)]` attribute on the fields directly:
@@ -172,12 +171,12 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(FromDef, attributes(def_type, elf))]
 pub fn from_def(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    let asset_module = match CratePath::try_from(ELF_MODULE_PATH) {
+    let elf_crate_path = match CratePath::try_from(ELF_MODULE_PATH) {
         Ok(asset_module) => asset_module,
         Err(e) => return e.into_compile_error().into(),
     };
-    let bevy_crate = match resolve_crate_name("bevy") {
-        Ok(bevy_crate) => bevy_crate,
+    let bevy_asset_crate = match resolve_crate_name("bevy_asset") {
+        Ok(bevy_asset_crate) => bevy_asset_crate,
         Err(e) => return e.into_compile_error().into(),
     };
     let load_context_var_ident = Ident::new("ctx", Span::call_site());
@@ -195,7 +194,7 @@ pub fn from_def(item: TokenStream) -> TokenStream {
     let (generated_def, def_type, def_transform) = match type_elf_attr {
         Some(TypeElfAttr::DefType(def_type)) if is_self(&def_type) => (
             None,
-            def_type,
+            *def_type,
             DefTransformResult {
                 transformation: def_var_ident.to_token_stream(),
                 resolver_fns: Vec::new(),
@@ -211,7 +210,7 @@ pub fn from_def(item: TokenStream) -> TokenStream {
                 Ok(cimpl) => cimpl,
                 Err(e) => return e.to_compile_error().into(),
             };
-            (None, def_type, def_transform)
+            (None, *def_type, def_transform)
         }
         other => {
             let def_attrs = if let Some(TypeElfAttr::DefAttrs(def_attrs)) = other {
@@ -257,12 +256,11 @@ pub fn from_def(item: TokenStream) -> TokenStream {
 
         impl #impl_generics #from_def_trait #ty_generics for #input_ident #where_clause {
             type Def = #def_type;
-            type Error = #asset_module::FromDefError;
 
             fn from_def(
                 #def_var_ident: Self::Def,
-                #load_context_var_ident: &mut #bevy_crate::asset::LoadContext<'_>,
-            ) -> std::result::Result<Self, Self::Error> {
+                #load_context_var_ident: &mut #bevy_asset_crate::LoadContext<'_>,
+            ) -> std::result::Result<Self, #elf_crate_path::FromDefError> {
                 Ok(#transformation)
             }
         }
