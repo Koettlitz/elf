@@ -1,10 +1,6 @@
 use std::borrow::Cow;
 
-use proc_macro2::TokenStream;
-use quote::{ToTokens, quote};
 use syn::{Ident, LitStr, Token, parse::Parse};
-
-use crate::{CratePath, ELF_MODULE_PATH};
 
 pub struct SpecArgs<'a> {
     pub base_path: Cow<'a, LitStr>,
@@ -51,23 +47,4 @@ impl<'a> Parse for SpecArgs<'a> {
             extension: extension.map(Cow::Owned),
         })
     }
-}
-
-pub fn create_spec_impl(
-    type_ident: &impl ToTokens,
-    args: &SpecArgs,
-) -> Result<TokenStream, syn::Error> {
-    let asset_module = CratePath::try_from(ELF_MODULE_PATH)?;
-    let base_path = &args.base_path;
-    let extension = args
-        .extension
-        .as_ref()
-        .map(|e| quote!(Some(#e)))
-        .unwrap_or_else(|| quote!(None));
-    Ok(quote! {
-        impl #asset_module::AssetPathSpec for #type_ident {
-            const BASE_PATH: &'static str = #base_path;
-            const EXTENSION: Option<&'static str> = #extension;
-        }
-    })
 }

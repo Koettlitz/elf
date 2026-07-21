@@ -17,7 +17,7 @@ use crate::{
         DefTransformResult, TypeElfAttr, derive_def_type_name, from_def_trait, generate_def_for,
         generate_def_transform,
     },
-    spec::{SpecArgs, create_spec_impl},
+    spec::SpecArgs,
 };
 
 mod from_def;
@@ -45,7 +45,7 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => {
             let error = syn::Error::new_spanned(
                 &item,
-                "asset_spec attribute is only valid for structs and enums",
+                "`asset_spec` attribute is only valid for structs and enums",
             )
             .to_compile_error();
             return quote! {
@@ -55,19 +55,25 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
             .into();
         }
     };
-    let args = parse_macro_input!(attr as SpecArgs);
-    let spec_impl = match create_spec_impl(type_ident, &args) {
-        Ok(resolver_impl) => resolver_impl,
-        Err(e) => e.to_compile_error(),
-    };
     let asset_module = match CratePath::try_from(ELF_MODULE_PATH) {
         Ok(asset_module) => asset_module,
         Err(e) => return e.to_compile_error().into(),
     };
+    let args = parse_macro_input!(attr as SpecArgs);
+    let base_path = &args.base_path;
+    let extension = args
+        .extension
+        .as_ref()
+        .map(|e| quote!(Some(#e)))
+        .unwrap_or_else(|| quote!(None));
+
     quote! {
         #item
 
-        #spec_impl
+        impl #asset_module::AssetPathSpec for #type_ident {
+            const BASE_PATH: &'static str = #base_path;
+            const EXTENSION: Option<&'static str> = #extension;
+        }
 
         impl #asset_module::HasResolver for #type_ident {
             type Resolver = #asset_module::ResolverSpec<Self>;
