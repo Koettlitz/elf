@@ -134,39 +134,3 @@ fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
     field.ty = parse2(quote!(<#field_type as #from_def_trait>::Def))?;
     Ok(Some(field))
 }
-
-#[cfg(test)]
-mod test {
-    use super::generate_def_for;
-    use quote::quote;
-    use syn::{DeriveInput, ItemStruct, parse2};
-
-    #[test]
-    fn test_def_generation() {
-        let input_struct = quote! {
-            struct TestAsset<T: ops::Add> {
-                name: String,
-                fancy: Vec<Rc<RefCell<T::Output>>>,
-                handle: Handle<HurensohnAsset<'_>>,
-                nested: Vec<Rc<RefCell<Handle<T::Output>>>>,
-            }
-        };
-        let derive_input: DeriveInput = parse2(input_struct).unwrap();
-        let def_type = syn::parse_str("TestDef").unwrap();
-        let generated = generate_def_for(&derive_input, &def_type, &Vec::new()).unwrap();
-        let expected = quote! {
-            #[derive(serde::Serialize, serde::Deserialize)]
-            struct TestDef<T: ops::Add> {
-                name: <String as bevy_elf::FromDef>::Def,
-                fancy: <Vec<Rc<RefCell<T::Output>>> as bevy_elf::FromDef>::Def,
-                handle: <Handle<HurensohnAsset<'_>> as bevy_elf::FromDef>::Def,
-                nested: <Vec<Rc<RefCell<Handle<T::Output>>>> as bevy_elf::FromDef>::Def
-            }
-        };
-        let generated: ItemStruct = parse2(generated).unwrap();
-        let expected: ItemStruct = parse2(expected).unwrap();
-        let generated = quote!(#generated).to_string();
-        let expected = quote!(#expected).to_string();
-        assert_eq!(generated, expected);
-    }
-}

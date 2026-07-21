@@ -93,7 +93,7 @@ pub fn from_def(item: TokenStream) -> TokenStream {
         Ok(asset_module) => asset_module,
         Err(e) => return e.into_compile_error().into(),
     };
-    let bevy_asset_crate = match resolve_crate_name("bevy_asset") {
+    let bevy_crate = match resolve_crate_name("bevy") {
         Ok(bevy_asset_crate) => bevy_asset_crate,
         Err(e) => return e.into_compile_error().into(),
     };
@@ -177,7 +177,7 @@ pub fn from_def(item: TokenStream) -> TokenStream {
 
             fn from_def(
                 #def_var_ident: Self::Def,
-                #load_context_var_ident: &mut #bevy_asset_crate::LoadContext<'_>,
+                #load_context_var_ident: &mut #bevy_crate::asset::LoadContext<'_>,
             ) -> std::result::Result<Self, #elf_crate_path::FromDefError> {
                 Ok(#transformation)
             }
