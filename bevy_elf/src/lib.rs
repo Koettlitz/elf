@@ -5,7 +5,7 @@
 //! crate generates a serializable "Def" counterpart for each type, using plain
 //! strings in place of [`Handle`]s, along with a [`trait@FromDef`] impl that
 //! converts a Def back into its runtime type — resolving each string into a
-//! [`Handle`] along the way.
+//! [`Handle`] by using [`LoadContext::load()`] along the way.
 //!
 //! ## Basic usage
 //! Let's say you have an animation asset `water_animation.ron`, which references its spritesheet

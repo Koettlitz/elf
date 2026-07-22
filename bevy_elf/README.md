@@ -9,7 +9,9 @@ Load and resolve assets that reference other assets by name, in [Bevy](https://b
 Hand-written asset types use `Handle<T>`, which isn't serializable. `bevy_elf` generates a
 serializable "Def" counterpart of your asset struct — using plain strings in place of
 `Handle`s — and a `FromDef` implementation that converts the Def back into your runtime type,
-resolving each string into a `Handle` along the way.
+resolving each string into a `Handle` by using bevy's `LoadContext::load()` along the way.
+
+## Example
 
 ```ron
 // water_animation.ron
@@ -35,7 +37,11 @@ struct AnimationAsset {
 #[derive(FromDef, Asset, TypePath)]
 #[asset_spec(base_path = "spritesheets", extension = "ron")]
 struct Spritesheet {
-    // fields omitted
+    #[elf(with_spec(base_path = "spritesheets/images", extension = "png"))]
+    image: Handle<Image>,
+
+    #[elf(with_spec(base_path = "spritesheets/layouts", extension = "ron"))]
+    layout: Handle<TextureAtlasLayout>,
 }
 ```
 
@@ -54,9 +60,10 @@ app.add_plugins((
 
 Bevy assets that reference other assets naturally want to hold a `Handle<T>`, but `Handle`
 isn't something you can put in a `.ron`/`.toml`/`.json` file — there's nothing to point at
-until the asset is loaded. The usual workaround is writing two versions of every asset type by
-hand: a serializable "spec" version with string IDs, and a runtime version with `Handle`s, plus
-the boilerplate to convert between them. `bevy_elf` generates that boilerplate for you.
+until the asset is loaded. The workaround is writing two versions of every asset type by
+hand: a serializable "def" version with string IDs, and a runtime version with `Handle`s, plus
+the boilerplate to convert between them. `bevy_elf` generates that boilerplate for you, so you
+have one type with annotations as the single source of truth.
 
 ## Features
 
@@ -82,9 +89,6 @@ like `Handle<Image>`) are covered in the [crate documentation](https://docs.rs/b
 
 ## License
 
-Dual-licensed under either
-
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-
-at your option.
+Dual-licensed under either [MIT](https://github.com/Koettlitz/elf/blob/master/LICENSE-MIT) or
+[Apache License, Version 2.0](https://github.com/Koettlitz/elf/blob/master/LICENSE-APACHE) at
+your option.
