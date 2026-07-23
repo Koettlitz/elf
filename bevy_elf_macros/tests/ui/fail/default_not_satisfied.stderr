@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `NonDefault: std::default::Default` is not satisfied
+  --> tests/ui/fail/default_not_satisfied.rs:7:8
+   |
+ 7 |     x: NonDefault,
+   |        ^^^^^^^^^^ the trait `std::default::Default` is not implemented for `NonDefault`
+   |
+help: consider annotating `NonDefault` with `#[derive(Default)]`
+   |
+12 + #[derive(Default)]
+13 | struct NonDefault {
+   |

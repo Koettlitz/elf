@@ -758,6 +758,10 @@ where
         let def: A::Def = ron::de::from_bytes(&bytes)?;
         Ok(A::from_def(def, load_context)?)
     }
+
+    fn extensions(&self) -> &[&str] {
+        &["ron"]
+    }
 }
 
 impl<A> Default for RonAssetLoader<A> {

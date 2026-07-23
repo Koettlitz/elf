@@ -24,7 +24,9 @@ resolving each string into a `Handle` by using bevy's `LoadContext::load()` alon
 
 ```rust
 use bevy_asset::prelude::*;
-use bevy_elf::{FromDef, asset_spec};
+use bevy_elf::{asset_spec, FromDef};
+use bevy_image::{Image, TextureAtlasLayout};
+use bevy_reflect::TypePath;
 use std::time::Duration;
 
 #[derive(FromDef, Asset, TypePath)]
@@ -43,6 +45,8 @@ struct Spritesheet {
     #[elf(with_spec(base_path = "spritesheets/layouts", extension = "ron"))]
     layout: Handle<TextureAtlasLayout>,
 }
+
+fn main() {}
 ```
 
 The derive macro generates the `Def` struct, its `Deserialize` impl, and the resolution logic
@@ -50,6 +54,8 @@ that turns `"water"` into `Handle<Spritesheet>` by loading `spritesheets/water.r
 the loader with the `RonAssetPlugin`:
 
 ```rust
+use bevy_elf::RonAssetPlugin;
+
 app.add_plugins((
     RonAssetPlugin::<AnimationAsset>::default(),
     RonAssetPlugin::<Spritesheet>::default(),
@@ -67,11 +73,12 @@ have one type with annotations as the single source of truth.
 
 ## Features
 
-| Feature   | Default | Adds                                                       |
-|-----------|:-------:|--------------------------------------------------------------|
+| Feature   | Default | Adds                                                                          |
+|-----------|:-------:|-------------------------------------------------------------------------------|
 | `macros`  |    ✅   | The `FromDef` derive macro and `asset_spec` attribute (via `bevy_elf_macros`) |
-| `math`    |    ✅   | `FromDef` impls for `bevy_math` types (`Vec2`, `Vec3`, `Quat`, `Rect`, ...) |
-| `image`   |    ❌   | `FromDef` impl for `bevy_image::TextureAtlasLayout`          |
+| `app`     |    ✅   | Includes the `RonAssetPlugin` and pulls `bevy_app` as a dependency            |
+| `math`    |    ✅   | `FromDef` impls for `bevy_math` types (`Vec2`, `Vec3`, `Quat`, `Rect`, ...)   |
+| `image`   |    ❌   | `FromDef` impl for `bevy_image::TextureAtlasLayout`                           |
 
 Without `macros`, you can still implement `FromDef`/`FromDefWithResolver` by hand for full
 control over the conversion.

@@ -12,16 +12,13 @@ use syn::{
     DeriveInput, Ident, Item, ItemEnum, ItemStruct, TypePath, parse_macro_input, spanned::Spanned,
 };
 
-use crate::{
-    from_def::{
-        DefTransformResult, TypeElfAttr, derive_def_type_name, from_def_trait, generate_def_for,
-        generate_def_transform,
-    },
-    spec::SpecArgs,
-};
+use crate::{from_def::from_def_impl, spec::SpecArgs};
 
 mod from_def;
 mod spec;
+
+#[cfg(test)]
+mod test;
 
 const ELF_MODULE_PATH: &str = "bevy_elf";
 
@@ -88,104 +85,10 @@ pub fn asset_spec(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(FromDef, attributes(elf))]
 pub fn from_def(item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    let elf_crate_path = match CratePath::try_from(ELF_MODULE_PATH) {
-        Ok(asset_module) => asset_module,
-        Err(e) => return e.into_compile_error().into(),
-    };
-    let bevy_crate = match resolve_crate_name("bevy") {
-        Ok(bevy_asset_crate) => bevy_asset_crate,
-        Err(e) => return e.into_compile_error().into(),
-    };
-    let load_context_var_ident = Ident::new("ctx", Span::call_site());
-    let input_ident = &input.ident;
-    let from_def_trait = match from_def_trait() {
-        Ok(from_def_trait) => from_def_trait,
-        Err(e) => return e.into_compile_error().into(),
-    };
-    let def_var_ident = Ident::new("def", Span::call_site());
-
-    let type_elf_attr = match TypeElfAttr::from_attrs(&input.attrs) {
-        Ok(attr) => attr,
-        Err(e) => return e.to_compile_error().into(),
-    };
-    let (generated_def, def_type, def_transform) = match type_elf_attr {
-        Some(TypeElfAttr::DefType(def_type)) if is_self(&def_type) => (
-            None,
-            *def_type,
-            DefTransformResult {
-                transformation: def_var_ident.to_token_stream(),
-                resolver_fns: Vec::new(),
-            },
-        ),
-        Some(TypeElfAttr::DefType(def_type)) => {
-            let def_transform = match generate_def_transform(
-                &input,
-                &def_type,
-                &def_var_ident,
-                &load_context_var_ident,
-            ) {
-                Ok(cimpl) => cimpl,
-                Err(e) => return e.to_compile_error().into(),
-            };
-            (None, *def_type, def_transform)
-        }
-        other => {
-            let def_attrs = if let Some(TypeElfAttr::DefAttrs(def_attrs)) = other {
-                def_attrs
-            } else {
-                Vec::new()
-            };
-            let def_type_name = derive_def_type_name(&input_ident.to_string());
-            let def_type = match syn::parse_str(&def_type_name) {
-                Ok(def_type) => def_type,
-                Err(e) => return e.to_compile_error().into(),
-            };
-            let generated_def = match generate_def_for(&input, &def_type, &def_attrs) {
-                Ok(def) => def,
-                Err(e) => return e.to_compile_error().into(),
-            };
-            let def_transform = match generate_def_transform(
-                &input,
-                &def_type,
-                &def_var_ident,
-                &load_context_var_ident,
-            ) {
-                Ok(def_transform) => def_transform,
-                Err(e) => return e.to_compile_error().into(),
-            };
-            (Some(generated_def), def_type, def_transform)
-        }
-    };
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let (transformation, resolver_fns) = (def_transform.transformation, def_transform.resolver_fns);
-    let resolver_fns = if resolver_fns.is_empty() {
-        None
-    } else {
-        Some(quote! {
-            impl #impl_generics #input_ident #ty_generics #where_clause {
-                #(#resolver_fns)*
-            }
-        })
-    };
-
-    quote! {
-        #generated_def
-
-        impl #impl_generics #from_def_trait #ty_generics for #input_ident #where_clause {
-            type Def = #def_type;
-
-            fn from_def(
-                #def_var_ident: Self::Def,
-                #load_context_var_ident: &mut #bevy_crate::asset::LoadContext<'_>,
-            ) -> std::result::Result<Self, #elf_crate_path::FromDefError> {
-                Ok(#transformation)
-            }
-        }
-
-        #resolver_fns
+    match from_def_impl(parse_macro_input!(item as DeriveInput)) {
+        Ok(result) => result.into(),
+        Err(e) => e.to_compile_error().into(),
     }
-    .into()
 }
 
 /// A [`syn::Path`] whose first segment is rewritten to the correct crate name.
@@ -259,16 +162,25 @@ impl ToTokens for CratePath {
     }
 }
 
-fn resolve_crate_name(orig_name: &str) -> syn::Result<proc_macro2::TokenStream> {
-    match crate_name(orig_name) {
-        Ok(FoundCrate::Itself) => Ok(quote!(crate)),
+fn bevy_asset_mod_path() -> syn::Result<proc_macro2::TokenStream> {
+    if let Ok(found) = crate_name("bevy_asset") {
+        return Ok(match found {
+            FoundCrate::Itself => quote!(crate),
+            FoundCrate::Name(name) => {
+                let ident = Ident::new(&name, Span::call_site());
+                quote!(#ident)
+            }
+        });
+    }
+    match crate_name("bevy") {
+        Ok(FoundCrate::Itself) => Ok(quote!(crate::asset)),
         Ok(FoundCrate::Name(name)) => {
             let ident = Ident::new(&name, Span::call_site());
-            Ok(quote!(#ident))
+            Ok(quote!(#ident::asset))
         }
         Err(e) => Err(syn::Error::new(
             Span::call_site(),
-            format!("could not resolve crate {orig_name} - {e}"),
+            format!("could not resolve `bevy_asset` or `bevy` (needed for `LoadContext`): {e}"),
         )),
     }
 }
