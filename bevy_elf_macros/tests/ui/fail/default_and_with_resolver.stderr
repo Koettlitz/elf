@@ -1,0 +1,5 @@
+error: `from_default` and `default` cannot be combined with other parameters
+ --> tests/ui/fail/default_and_with_resolver.rs:6:5
+  |
+6 |     #[elf(default, with_resolver(Bar))]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

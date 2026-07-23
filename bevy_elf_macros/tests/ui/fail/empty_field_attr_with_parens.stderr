@@ -1,0 +1,5 @@
+error: Empty `elf` attribute not allowed. Expected at least one of `from_default`, `default`, `implicit`, `with_spec`, `on_def` or `with_resolver`
+ --> tests/ui/fail/empty_field_attr_with_parens.rs:6:5
+  |
+6 |     #[elf()]
+  |     ^^^^^^^^

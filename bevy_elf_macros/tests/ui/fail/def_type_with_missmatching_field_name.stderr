@@ -1,0 +1,7 @@
+error[E0609]: no field `foo` on type `FooDef`
+ --> tests/ui/fail/def_type_with_missmatching_field_name.rs:8:5
+  |
+8 |     foo: usize,
+  |     ^^^ unknown field
+  |
+  = note: available field is: `bar`

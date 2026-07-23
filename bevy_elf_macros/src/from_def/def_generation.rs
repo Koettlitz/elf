@@ -1,8 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    Attribute, Data, DataEnum, DataStruct, DeriveInput, Field, Fields, Generics, Visibility,
-    parse2, punctuated::Punctuated, token::Comma,
+    AngleBracketedGenericArguments, Attribute, Data, DataEnum, DataStruct, DeriveInput, Field,
+    Fields, Generics, PathArguments, TypePath, Visibility, parse2, punctuated::Punctuated,
+    token::Comma,
 };
 
 use crate::{
@@ -112,6 +113,12 @@ fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
     let elf = FieldElfAttr::from_attrs(&field.attrs)?;
     let from_def_trait = match elf {
         Some(attr) if attr.omit_def_field() => {
+            if attr.implicit && !is_handle_or_asset_ref(&field.ty) {
+                return Err(syn::Error::new_spanned(
+                    field.ty,
+                    "`implicit` can only be used for fields of type `Handle` or `AssetRef`",
+                ));
+            }
             return Ok(None);
         }
         Some(FieldElfAttr { spec: Some(_), .. })
@@ -134,4 +141,19 @@ fn generate_def_field(mut field: Field) -> syn::Result<Option<Field>> {
     }
     field.ty = parse2(quote!(<#field_type as #from_def_trait>::Def))?;
     Ok(Some(field))
+}
+
+fn is_handle_or_asset_ref(ty: &syn::Type) -> bool {
+    let syn::Type::Path(TypePath { path, .. }) = ty else {
+        return false;
+    };
+    let Some(last_segment) = path.segments.last() else {
+        return false;
+    };
+    let PathArguments::AngleBracketed(AngleBracketedGenericArguments { .. }) =
+        &last_segment.arguments
+    else {
+        return false;
+    };
+    last_segment.ident == "Handle" || last_segment.ident == "AssetRef"
 }

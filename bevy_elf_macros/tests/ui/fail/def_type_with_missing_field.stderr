@@ -1,0 +1,11 @@
+error[E0609]: no field `b` on type `FooDef`
+ --> tests/ui/fail/def_type_with_missing_field.rs:9:5
+  |
+9 |     b: String,
+  |     ^ unknown field
+  |
+help: a field with a similar name exists
+  |
+9 -     b: String,
+9 +     a: String,
+  |
