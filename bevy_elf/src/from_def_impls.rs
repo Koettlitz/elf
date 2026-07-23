@@ -29,6 +29,7 @@ from_def_self![
     isize,
     f32,
     f64,
+    bool,
     String,
     std::time::Duration,
 ];

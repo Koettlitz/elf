@@ -24,7 +24,9 @@ resolving each string into a `Handle` by using bevy's `LoadContext::load()` alon
 
 ```rust
 use bevy_asset::prelude::*;
-use bevy_elf::{FromDef, asset_spec};
+use bevy_elf::{asset_spec, FromDef};
+use bevy_image::{Image, TextureAtlasLayout};
+use bevy_reflect::TypePath;
 use std::time::Duration;
 
 #[derive(FromDef, Asset, TypePath)]
@@ -43,17 +45,18 @@ struct Spritesheet {
     #[elf(with_spec(base_path = "spritesheets/layouts", extension = "ron"))]
     layout: Handle<TextureAtlasLayout>,
 }
+
+fn main() {}
 ```
 
 The derive macro generates the `Def` struct, its `Deserialize` impl, and the resolution logic
 that turns `"water"` into `Handle<Spritesheet>` by loading `spritesheets/water.ron`. Register
-the loader with the `RonAssetPlugin`:
+the loader and the asset manually or via the `AppExt` extension crate:
 
 ```rust
-app.add_plugins((
-    RonAssetPlugin::<AnimationAsset>::default(),
-    RonAssetPlugin::<Spritesheet>::default(),
-));
+use bevy_elf::AppExt;
+
+app.init_ron_asset::<AnimationAsset>().init_ron_asset::<Spritesheet>();
 ```
 
 ## Why
@@ -67,11 +70,12 @@ have one type with annotations as the single source of truth.
 
 ## Features
 
-| Feature   | Default | Adds                                                       |
-|-----------|:-------:|--------------------------------------------------------------|
+| Feature   | Default | Adds                                                                          |
+|-----------|:-------:|-------------------------------------------------------------------------------|
 | `macros`  |    ✅   | The `FromDef` derive macro and `asset_spec` attribute (via `bevy_elf_macros`) |
-| `math`    |    ✅   | `FromDef` impls for `bevy_math` types (`Vec2`, `Vec3`, `Quat`, `Rect`, ...) |
-| `image`   |    ❌   | `FromDef` impl for `bevy_image::TextureAtlasLayout`          |
+| `app`     |    ✅   | Includes the `AppExt` extension trait and pulls `bevy_app` as a dependency    |
+| `math`    |    ✅   | `FromDef` impls for `bevy_math` types (`Vec2`, `Vec3`, `Quat`, `Rect`, ...)   |
+| `image`   |    ❌   | `FromDef` impl for `bevy_image::TextureAtlasLayout`                           |
 
 Without `macros`, you can still implement `FromDef`/`FromDefWithResolver` by hand for full
 control over the conversion.

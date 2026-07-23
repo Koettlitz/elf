@@ -52,15 +52,11 @@
 //! ```
 //! Assets, that implement [`trait@FromDef`] can be loaded with the [`RonAssetLoader`], which calls
 //! [`FromDef::from_def()`] to convert the raw deserialized structure into the runtime
-//! structure. You can register the asset and the [`RonAssetLoader`] manually or just add the
-//! [`RonAssetPlugin`]:
+//! structure. You can register the asset and the [`RonAssetLoader`] manually or use the [`AppExt`] extension trait:
 //! ```ignore
 //! # use bevy_app::prelude::*;
-//! # use bevy_elf::RonAssetPlugin;
-//! app.add_plugins((
-//!     RonAssetPlugin::<AnimationAsset>::default(),
-//!     RonAssetPlugin::<Spritesheet>::default(),
-//! ));
+//! # use bevy_elf::AppExt;
+//! app.init_ron_asset::<AnimationAsset>().init_ron_asset::<Spritesheet>();
 //! ```
 //! To resolve the string names into handles some metadata needs to be provided. Let's
 //! take the Spritesheet asset as an example:
@@ -182,7 +178,7 @@
 //! Note that since the spritesheets directory doesn't exist anymore, `images/` and `layouts/`
 //! move up to become top-level asset folders, so we changed from `sub_path` back to `base_path`.
 //! Also note, that Spritesheet is no `Asset` anymore, since it doesn't get loaded from a file,
-//! so the registration via `app.add_plugins(RonAssetPlugin::<Spritesheet>::default());` disappears as well.
+//! so the registration via `app.init_ron_asset::<Spritesheet>();` disappears as well.
 //!
 //! For more attributes and options see [`derive@FromDef`].
 
@@ -523,7 +519,8 @@ where
 /// It deserializes the asset bytes into the [`FromDef::Def`] type and then turns it into
 /// the runtime asset type which implements [`trait@FromDef`] by passing it to [`FromDef::from_def()`].
 /// This trait can be implemented manually or by using the derive macro [`derive@FromDef`].
-/// To enable loading ron assets implementing [`trait@FromDef`] just add the [`RonAssetPlugin`].
+/// To enable loading ron assets implementing [`trait@FromDef`] init the asset and loader via
+/// [`AppExt::init_ron_asset()`].
 pub trait FromDef {
     type Def: DeserializeOwned;
 
@@ -595,6 +592,26 @@ impl<A: Asset> FromDefWithResolver for AssetRef<A> {
     }
 }
 
+impl<A: Asset> PartialEq for AssetRef<A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.handle.id() == other.handle.id()
+    }
+}
+
+impl<A: Asset> PartialEq<Handle<A>> for AssetRef<A> {
+    fn eq(&self, other: &Handle<A>) -> bool {
+        self.handle.id() == other.id()
+    }
+}
+
+impl<A: Asset> Clone for AssetRef<A> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            handle: self.handle.clone(),
+        }
+    }
+}
 impl<A: Asset + HasResolver> FromDef for Handle<A> {
     type Def = String;
 
@@ -712,29 +729,6 @@ where
     }
 }
 
-/// Registers the asset type `A` and a [`RonAssetLoader<A>`]
-/// This is equivalent to calling
-/// `app.init_asset::<A>().init_asset_loader::<RonAssetLoader<A>>();`
-/// Note that the asset type `A` has to implement [`Asset`] and [`FromDef`].
-#[cfg(feature = "app")]
-pub struct RonAssetPlugin<A>(Phantom<A>);
-impl<A> Default for RonAssetPlugin<A> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
-
-#[cfg(feature = "app")]
-impl<A> Plugin for RonAssetPlugin<A>
-where
-    A: Asset + FromDef + 'static,
-{
-    fn build(&self, app: &mut App) {
-        app.init_asset::<A>()
-            .init_asset_loader::<RonAssetLoader<A>>();
-    }
-}
-
 /// Loads assets, which implement [`trait@FromDef`] from ron files passing the deserialized
 /// [`FromDef::Def`] value into the assets [`FromDef::from_def`] method.
 #[derive(TypePath)]
@@ -758,6 +752,10 @@ where
         let def: A::Def = ron::de::from_bytes(&bytes)?;
         Ok(A::from_def(def, load_context)?)
     }
+
+    fn extensions(&self) -> &[&str] {
+        &["ron"]
+    }
 }
 
 impl<A> Default for RonAssetLoader<A> {
@@ -776,23 +774,26 @@ pub enum RonAssetLoadError {
     FromDef(#[from] FromDefError),
 }
 
-impl<A: Asset> PartialEq for AssetRef<A> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.handle.id() == other.handle.id()
-    }
+/// Extension trait for [`App`] to register a ron asset with a [`FromDef`] implementation
+/// and a corresponding [`RonAssetLoader`] by calling `app.init_ron_asset::<MyRonAsset>()`.
+#[cfg(feature = "app")]
+pub trait AppExt {
+    fn init_ron_asset<A: Asset + FromDef>(&mut self) -> &mut Self;
 }
 
-impl<A: Asset> PartialEq<Handle<A>> for AssetRef<A> {
-    fn eq(&self, other: &Handle<A>) -> bool {
-        self.handle.id() == other.id()
-    }
-}
+#[cfg(feature = "app")]
+impl AppExt for App {
+    /// Registers the asset type `A` and a [`RonAssetLoader<A>`]
+    /// This is equivalent to calling
+    /// ```ignore
+    /// app.init_asset::<A>()
+    ///    .init_asset_loader::<RonAssetLoader<A>>();
+    /// ```
+    /// Note that the asset type `A` has to implement [`Asset`] and [`FromDef`].
+    fn init_ron_asset<A: Asset + FromDef>(&mut self) -> &mut Self {
+        self.init_asset::<A>()
+            .init_asset_loader::<RonAssetLoader<A>>();
 
-impl<A: Asset> Clone for AssetRef<A> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone(),
-            handle: self.handle.clone(),
-        }
+        self
     }
 }

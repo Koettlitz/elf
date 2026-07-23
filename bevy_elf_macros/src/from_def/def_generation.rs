@@ -33,8 +33,9 @@ pub fn generate_def_for(
             "unions are not supported",
         )),
     }?;
+    let serde = CratePath::try_from("serde")?;
     let attrs = if attrs.is_empty() {
-        quote!(#[derive(serde::Serialize, serde::Deserialize)])
+        quote!(#[derive(#serde::Serialize, #serde::Deserialize)])
     } else {
         quote!(#(#attrs)*)
     };

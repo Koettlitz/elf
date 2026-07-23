@@ -2,6 +2,10 @@ use std::fmt::Debug;
 
 use proc_macro2::Ident;
 use proc_macro2::Span;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
+use quote::quote;
+use syn::DeriveInput;
 use syn::Type;
 use syn::{Attribute, Expr, LitStr, Token, parenthesized, parse::Parse, spanned::Spanned};
 
@@ -13,6 +17,75 @@ pub use from_def_conversion::{DefTransformResult, generate_def_transform};
 
 use crate::CratePath;
 use crate::ELF_MODULE_PATH;
+use crate::bevy_asset_mod_path;
+use crate::is_self;
+
+pub fn from_def_impl(input: DeriveInput) -> Result<TokenStream, syn::Error> {
+    let elf_crate_path = CratePath::try_from(ELF_MODULE_PATH)?;
+    let bevy_asset_mod_path = bevy_asset_mod_path()?;
+    let load_context_var_ident = Ident::new("ctx", Span::call_site());
+    let input_ident = &input.ident;
+    let from_def_trait = from_def_trait()?;
+    let def_var_ident = Ident::new("def", Span::call_site());
+
+    let type_elf_attr = TypeElfAttr::from_attrs(&input.attrs)?;
+    let (generated_def, def_type, def_transform) = match type_elf_attr {
+        Some(TypeElfAttr::DefType(def_type)) if is_self(&def_type) => (
+            None,
+            *def_type,
+            DefTransformResult {
+                transformation: def_var_ident.to_token_stream(),
+                resolver_fns: Vec::new(),
+            },
+        ),
+        Some(TypeElfAttr::DefType(def_type)) => {
+            let def_transform =
+                generate_def_transform(&input, &def_type, &def_var_ident, &load_context_var_ident)?;
+            (None, *def_type, def_transform)
+        }
+        other => {
+            let def_attrs = if let Some(TypeElfAttr::DefAttrs(def_attrs)) = other {
+                def_attrs
+            } else {
+                Vec::new()
+            };
+            let def_type_name = derive_def_type_name(&input_ident.to_string());
+            let def_type = syn::parse_str(&def_type_name)?;
+            let generated_def = generate_def_for(&input, &def_type, &def_attrs)?;
+            let def_transform =
+                generate_def_transform(&input, &def_type, &def_var_ident, &load_context_var_ident)?;
+            (Some(generated_def), def_type, def_transform)
+        }
+    };
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let (transformation, resolver_fns) = (def_transform.transformation, def_transform.resolver_fns);
+    let resolver_fns = if resolver_fns.is_empty() {
+        None
+    } else {
+        Some(quote! {
+            impl #impl_generics #input_ident #ty_generics #where_clause {
+                #(#resolver_fns)*
+            }
+        })
+    };
+
+    Ok(quote! {
+        #generated_def
+
+        impl #impl_generics #from_def_trait #ty_generics for #input_ident #where_clause {
+            type Def = #def_type;
+
+            fn from_def(
+                #def_var_ident: Self::Def,
+                #load_context_var_ident: &mut #bevy_asset_mod_path::LoadContext<'_>,
+            ) -> std::result::Result<Self, #elf_crate_path::FromDefError> {
+                Ok(#transformation)
+            }
+        }
+
+        #resolver_fns
+    })
+}
 
 #[derive(Debug)]
 pub enum TypeElfAttr {
