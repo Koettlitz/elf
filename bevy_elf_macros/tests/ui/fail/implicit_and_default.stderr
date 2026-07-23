@@ -1,0 +1,5 @@
+error: `from_default` and `default` cannot be combined with other parameters
+ --> tests/ui/fail/implicit_and_default.rs:8:5
+  |
+8 |     #[elf(implicit, default)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^

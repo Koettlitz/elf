@@ -1,0 +1,5 @@
+error: cannot use both `with_spec` and `with_resolver`
+ --> tests/ui/fail/with_spec_and_with_resolver.rs:9:5
+  |
+9 |     #[elf(with_spec(base_path = "base_path"), with_resolver(Resolver))]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

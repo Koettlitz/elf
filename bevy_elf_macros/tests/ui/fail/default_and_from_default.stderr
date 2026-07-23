@@ -1,0 +1,5 @@
+error: `from_default` and `default` cannot be combined with other parameters
+ --> tests/ui/fail/default_and_from_default.rs:6:5
+  |
+6 |     #[elf(default, from_default)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

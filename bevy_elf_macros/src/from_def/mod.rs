@@ -108,6 +108,14 @@ impl TypeElfAttr {
                     ));
                 }
                 let elf: Self = attr.parse_args()?;
+                if let Self::DefAttrs(def_attrs) = &elf
+                    && def_attrs.is_empty()
+                {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        "Empty `elf` attribute not allowed. Expected at least one of `def_type` or `on_def`.",
+                    ));
+                }
                 result = Some(elf);
             }
         }
@@ -174,13 +182,8 @@ impl Parse for TypeElfAttr {
 
         if let Some(def_type) = def_type {
             Ok(Self::DefType(Box::new(def_type)))
-        } else if !def_attrs.is_empty() {
-            Ok(Self::DefAttrs(def_attrs))
         } else {
-            Err(syn::Error::new(
-                Span::call_site(),
-                "Empty `elf` attribute not allowed. Expected one of `def_type` or `on_def`.",
-            ))
+            Ok(Self::DefAttrs(def_attrs))
         }
     }
 }
@@ -210,14 +213,14 @@ impl FieldElfAttr {
                     ));
                 }
                 let field_attr: Self = attr.parse_args()?;
-                field_attr.validate(attr.path().span())?;
+                field_attr.validate(attr)?;
                 result = Some(field_attr);
             }
         }
         Ok(result)
     }
 
-    fn validate(&self, span: Span) -> syn::Result<()> {
+    fn validate(&self, span: impl ToTokens) -> syn::Result<()> {
         let Self {
             from_default,
             default,
@@ -235,28 +238,30 @@ impl FieldElfAttr {
             && def_attrs.is_empty()
             && !expose_resolver
         {
-            Err(syn::Error::new(
+            Err(syn::Error::new_spanned(
                 span,
-                "expected at least one of `from_default`, `default`, `implicit`, `with_spec`, `on_def` or `with_resolver`",
+                "Empty `elf` attribute not allowed. Expected at least one of `from_default`, `default`, `implicit`, `with_spec`, `on_def` or `with_resolver`",
             ))
         } else if *implicit && spec.as_ref().is_some_and(|spec| spec.extension.is_none()) {
-            Err(syn::Error::new(
+            Err(syn::Error::new_spanned(
                 span,
                 "expected `extension` on implicit field",
             ))
         } else if spec.is_some() && resolver.is_some() {
-            Err(syn::Error::new(
+            Err(syn::Error::new_spanned(
                 span,
                 "cannot use both `with_spec` and `with_resolver`",
             ))
-        } else if (*from_default || *default) && (*implicit || spec.is_some() || resolver.is_some())
+        } else if ((*from_default || *default)
+            && (*implicit || spec.is_some() || resolver.is_some()))
+            || (*from_default && *default)
         {
-            Err(syn::Error::new(
+            Err(syn::Error::new_spanned(
                 span,
                 "`from_default` and `default` cannot be combined with other parameters",
             ))
         } else if self.omit_def_field() && !def_attrs.is_empty() {
-            Err(syn::Error::new(
+            Err(syn::Error::new_spanned(
                 span,
                 "`on_def` is not allowed when the field doesn't exist on the def type, due to `implicit`, `from_default` or `default`",
             ))
@@ -290,7 +295,8 @@ impl Parse for FieldElfAttr {
                 "with_spec" => {
                     let spec_args;
                     parenthesized!(spec_args in input);
-                    spec = Some(FieldSpec::parse(&spec_args)?);
+                    // Here I wanna get the span of "with_spec(...)"
+                    spec = Some(ParsedFieldSpec::parse(&spec_args)?.validate(ident.span())?);
                 }
                 "with_resolver" => {
                     let resolver_expr;
@@ -350,24 +356,12 @@ impl Debug for FieldSpec {
     }
 }
 
-pub enum PathKind {
-    Root(LitStr),
-    Child(Option<LitStr>),
+pub struct ParsedFieldSpec {
+    pub path_kind: Option<PathKind>,
+    pub extension: Option<LitStr>,
 }
 
-impl Debug for PathKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Root(base_path) => write!(f, "base_path = \"{}\"", base_path.value()),
-            Self::Child(sub_path) => match sub_path {
-                Some(sub_path) => write!(f, "sub_path = \"{}\"", sub_path.value()),
-                None => write!(f, "sub_path"),
-            },
-        }
-    }
-}
-
-impl Parse for FieldSpec {
+impl Parse for ParsedFieldSpec {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut path_kind: Option<PathKind> = None;
         let mut extension: Option<LitStr> = None;
@@ -409,17 +403,43 @@ impl Parse for FieldSpec {
             }
         }
 
-        if path_kind.is_none() {
-            return Err(syn::Error::new(
-                input.span(),
-                "either `base_path = \"base/path\"` or `sub_path [= \"sub/path\"]` is required",
-            ));
-        }
-
         Ok(Self {
-            path_kind: path_kind.unwrap(),
+            path_kind,
             extension,
         })
+    }
+}
+
+impl ParsedFieldSpec {
+    fn validate(self, span: Span) -> syn::Result<FieldSpec> {
+        let Some(path_kind) = self.path_kind else {
+            return Err(syn::Error::new(
+                span,
+                "either `base_path = \"base/path\"` or `sub_path [= \"sub/path\"]` is required",
+            ));
+        };
+
+        Ok(FieldSpec {
+            path_kind,
+            extension: self.extension,
+        })
+    }
+}
+
+pub enum PathKind {
+    Root(LitStr),
+    Child(Option<LitStr>),
+}
+
+impl Debug for PathKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Root(base_path) => write!(f, "base_path = \"{}\"", base_path.value()),
+            Self::Child(sub_path) => match sub_path {
+                Some(sub_path) => write!(f, "sub_path = \"{}\"", sub_path.value()),
+                None => write!(f, "sub_path"),
+            },
+        }
     }
 }
 

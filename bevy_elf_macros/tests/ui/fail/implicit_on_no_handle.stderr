@@ -1,0 +1,5 @@
+error: `implicit` can only be used for fields of type `Handle` or `AssetRef`
+ --> tests/ui/fail/implicit_on_no_handle.rs:7:8
+  |
+7 |     x: bool,
+  |        ^^^^

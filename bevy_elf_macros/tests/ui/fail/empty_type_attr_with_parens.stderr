@@ -1,0 +1,5 @@
+error: Empty `elf` attribute not allowed. Expected at least one of `def_type` or `on_def`.
+ --> tests/ui/fail/empty_type_attr_with_parens.rs:4:1
+  |
+4 | #[elf()]
+  | ^^^^^^^^

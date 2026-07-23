@@ -1,0 +1,5 @@
+error[E0425]: cannot find type `Bar` in this scope
+ --> tests/ui/fail/invalid_def_type.rs:4:16
+  |
+4 | #[elf(def_type(Bar))]
+  |                ^^^ not found in this scope
