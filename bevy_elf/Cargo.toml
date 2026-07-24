@@ -1,6 +1,6 @@
 [package]
 name = "bevy_elf"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/Koettlitz/elf"
 license = "MIT OR Apache-2.0"
@@ -17,7 +17,7 @@ math = ["dep:bevy_math"]
 image = ["dep:bevy_image"]
 
 [dependencies]
-bevy_elf_macros = { version = "0.0.1", optional = true, path = "../bevy_elf_macros"}
+bevy_elf_macros = { version = "0.1.0", optional = true, path = "../bevy_elf_macros"}
 bevy_asset = "0.19"
 bevy_app = { version = "0.19", optional = true }
 bevy_reflect = "0.19"

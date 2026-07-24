@@ -4,7 +4,7 @@
 //! Hand-written asset types use [`Handle`]s, which aren't serializable. This
 //! crate generates a serializable "Def" counterpart for each type, using plain
 //! strings in place of [`Handle`]s, along with a [`trait@FromDef`] impl that
-//! converts a Def back into its runtime type — resolving each string into a
+//! converts a Def into its runtime type — resolving each string into a
 //! [`Handle`] by using [`LoadContext::load()`] along the way.
 //!
 //! ## Basic usage
@@ -33,9 +33,6 @@
 //!     frame_duration: Duration,
 //!     spritesheet: Handle<Spritesheet>,
 //! }
-//!
-//! #[derive(Asset, TypePath)]
-//! struct Spritesheet;
 //! ```
 //! The [`derive@FromDef`] derive macro generates a (de)serializable version of the struct as well as an
 //! implementation of the [`trait@FromDef`] trait, which converts it into your struct. The generated
@@ -204,7 +201,7 @@ pub use bevy_elf_macros::asset_spec;
 ///
 /// There are the following ways to specify the def_type:
 /// 1. `#[elf(def_type(Self))]` where no conversion is necessary, because the serializable type is
-///    also the runtime type. `from_def()` just returns `Self` as is.
+///    also the runtime type. `from_def()` just returns the input (`def: Self`) value as is.
 /// 2. `#[elf(def_type(CustomType))]` to provide a custom serializable def type to be used.
 ///    That type needs to have a corresponding field with the same name for each field in `Self`
 ///    that should be converted and each such field must implement
@@ -212,7 +209,7 @@ pub use bevy_elf_macros::asset_spec;
 ///    The field types must match the corresponding field's type in `Self` in terms
 ///    of its [`FromDef::Def`] type.
 /// 3. `#[elf(def_type(()))]` - use this when the type has no fields that need serialization.
-/// 4. If the additional `#[elf(def_type)]` attribute is omitted this macro generates a
+/// 4. If the additional `#[elf(def_type(...))]` attribute is omitted this macro generates a
 ///    def type.
 ///
 /// ### Field/variant level `#[elf]` attribute
@@ -220,13 +217,13 @@ pub use bevy_elf_macros::asset_spec;
 /// `#[elf(...)]` attribute on the fields directly:
 ///
 /// - `#[elf(with_spec(base_path = "base/path", extension = "ron"))]`<br>
-///   overrides the `asset_spec` of the field's
-///   type used for resolution. This is only relevant for types like `bevy::asset::Handle` or `AssetRef`.
+///   overrides the [`asset_spec`] of the field's type (if it has one) used for resolution.
+///   This is only relevant for types like [`Handle`] or [`AssetRef`].
 ///   The optional extension parameter is used for suffixing the file extension to the id, so in the ron file
-///   writing just "water" is enough to reference something at `assets/tiles/water.ron`. If you have
-///   multiple extensions for the same asset type (e.g. png and jpg) omit the extension parameter in
-///   the `#[elf(with_spec(...))]`, but then you have to specify the extension in the ron file, e.g.
-///   "water.png".
+///   writing just "water" is enough to reference something at `assets/tiles/water.ron`. If there
+///   are multiple possible extensions for the same asset type (e.g. png and jpg)
+///   omit the extension parameter in the `#[elf(with_spec(...))]`, but then you have to specify
+///   the extension in the ron file, e.g. "water.png".
 ///
 /// - `#[elf(with_spec(sub_path = "foo"))]`<br>
 ///   can be used as an alternative to specifying a `base_path` to make the field resolve relative
@@ -234,7 +231,7 @@ pub use bevy_elf_macros::asset_spec;
 ///
 /// - `#[elf(with_resolver(CustomResolver))]`<br>
 ///   can be used to specify a custom type that implements
-///   `AssetResolver`, which is used to resolve the asset path from the string id.
+///   [`AssetResolver`], which is used to resolve the asset path from the string id.
 ///
 /// - `#[elf(implicit)]`<br>
 ///   will omit the field in the generated def type and use the same id
@@ -253,7 +250,7 @@ pub use bevy_elf_macros::asset_spec;
 /// - `#[elf(from_default)]`<br>
 ///   will use the [`Default`] trait to construct the value of the
 ///   field's def type, so it omits the field in the generated def type and passes the default value
-///   to the field type's `from_def` method.
+///   to the field type's [`from_def`](FromDef::from_def) method.
 ///
 /// - `#[elf(on_def(#[...]))]`<br>
 ///   can be used on the type itself, on a variant or on a field to forward
@@ -518,7 +515,7 @@ where
 /// An asset type implementing [`trait@FromDef`] can be loaded by the [`RonAssetLoader`].
 /// It deserializes the asset bytes into the [`FromDef::Def`] type and then turns it into
 /// the runtime asset type which implements [`trait@FromDef`] by passing it to [`FromDef::from_def()`].
-/// This trait can be implemented manually or by using the derive macro [`derive@FromDef`].
+/// This trait can be implemented manually or by using the [`derive@FromDef`] derive macro.
 /// To enable loading ron assets implementing [`trait@FromDef`] init the asset and loader via
 /// [`AppExt::init_ron_asset()`].
 pub trait FromDef {
