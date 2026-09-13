@@ -1,3 +1,19 @@
 [workspace]
 resolver = "3"
-members = ["bevy_elf_macros", "bevy_elf"]
+members = ["bevy_elf_macros", "bevy_elf", "bevy_entity_lookup", "elf_macro_utils", "bevy_entity_lookup_macros"]
+
+[workspace.dependencies]
+syn = { version = "3.0" }
+quote = "1.0"
+proc-macro2 = "1.0"
+proc-macro-crate = "3"
+convert_case = "0.12"
+bevy_app = "0.19"
+bevy_ecs = "0.19"
+bevy_asset = "0.19"
+bevy_reflect = "0.19"
+bevy_image = "0.19"
+bevy_math = "0.19"
+serde = "1.0"
+ron = "0.12"
+thiserror = "2.0"

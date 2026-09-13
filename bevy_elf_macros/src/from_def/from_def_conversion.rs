@@ -1,10 +1,9 @@
-use convert_case::{Case, Casing};
+use elf_macro_utils::{FieldTransform, generate_transform};
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{
-    AngleBracketedGenericArguments, Data, DataEnum, DataStruct, DeriveInput, Field, Fields,
-    FieldsNamed, FieldsUnnamed, GenericArgument, Ident, PathArguments, Type, TypePath,
-    spanned::Spanned,
+    AngleBracketedGenericArguments, DeriveInput, Field, GenericArgument, Ident, PathArguments,
+    TypePath, spanned::Spanned,
 };
 
 use crate::{
@@ -36,185 +35,22 @@ pub fn generate_def_transform(
     def_type: &syn::Type,
     def_var_ident: impl ToTokens,
     load_context_var_ident: impl ToTokens,
-) -> Result<DefTransformResult, syn::Error> {
+) -> syn::Result<DefTransformResult> {
     let ctx = FromDefImplContext::new(def_var_ident, load_context_var_ident);
-    match &derive_input.data {
-        Data::Struct(input_struct) => generate_def_transform_for_struct(input_struct, &ctx),
-        Data::Enum(input_enum) => generate_def_transform_for_enum(input_enum, def_type, &ctx),
-        Data::Union(_) => Err(syn::Error::new(
-            derive_input.span(),
-            "def to asset conversion generation not supported for unions",
-        )),
-    }
-}
-
-fn generate_def_transform_for_struct(
-    input_struct: &DataStruct,
-    ctx: &FromDefImplContext,
-) -> Result<DefTransformResult, syn::Error> {
-    Ok(match &input_struct.fields {
-        Fields::Unit => DefTransformResult {
-            transformation: quote!(Self),
-            resolver_fns: Vec::new(),
+    let result = generate_transform(
+        derive_input,
+        def_type,
+        quote!(Self),
+        &ctx.def_var_ident,
+        |field, artificial_field_ident, field_access| {
+            process_field(field, artificial_field_ident, field_access, &ctx)
         },
-        Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
-            let def_var_ident = &ctx.def_var_ident;
-            let FieldResults {
-                field_conversions,
-                resolver_fns,
-                ..
-            } = unnamed
-                .iter()
-                .enumerate()
-                .map(|(field_index, field)| {
-                    let field_idx = syn::Index::from(field_index);
-                    let field_access = quote!(#def_var_ident.#field_idx);
-                    let field_ident = Ident::new(&format!("field{field_index}"), field.span());
-                    process_field(field, &field_ident, field_access, ctx)
-                })
-                .collect::<Result<FieldResults, syn::Error>>()?;
-            DefTransformResult {
-                transformation: quote!(Self( #(#field_conversions),* )),
-                resolver_fns,
-            }
-        }
-        Fields::Named(FieldsNamed { named, .. }) => {
-            let def_var_ident = &ctx.def_var_ident;
-            let FieldResults {
-                field_conversions,
-                resolver_fns,
-                ..
-            } = named
-                .iter()
-                .map(|field| {
-                    let field_ident = &field.ident;
-                    let field_access = quote!(#def_var_ident.#field_ident);
-                    process_field(field, field_ident.as_ref().unwrap(), field_access, ctx)
-                })
-                .collect::<Result<FieldResults, syn::Error>>()?;
-            DefTransformResult {
-                transformation: quote!(Self { #(#field_conversions),* }),
-                resolver_fns,
-            }
-        }
-    })
-}
+    )?;
 
-fn generate_def_transform_for_enum(
-    input_enum: &DataEnum,
-    def_type: &Type,
-    ctx: &FromDefImplContext,
-) -> Result<DefTransformResult, syn::Error> {
-    let mut variant_conversions = Vec::new();
-    let mut resolver_fns = Vec::new();
-    for variant in input_enum.variants.iter() {
-        let variant_ident = &variant.ident;
-        let (variant_conversion, mut variant_resolver_fns) = match &variant.fields {
-            Fields::Unit => (
-                quote!(#def_type::#variant_ident => Self::#variant_ident),
-                Vec::new(),
-            ),
-            Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
-                let FieldResults {
-                    def_fields,
-                    field_conversions,
-                    resolver_fns,
-                } = unnamed
-                    .iter()
-                    .enumerate()
-                    .map(|(field_index, field)| {
-                        let ident = generate_field_name_for_unnamed(
-                            Some(&variant_ident.to_string().to_case(Case::Snake)),
-                            field_index,
-                            field.span(),
-                        );
-                        (field, ident)
-                    })
-                    .map(|(field, ident)| process_field(field, &ident, &ident, ctx))
-                    .collect::<Result<FieldResults, syn::Error>>()?;
-                (
-                    quote! {
-                        #def_type::#variant_ident( #(#def_fields),* ) => Self::#variant_ident( #(#field_conversions),* )
-                    },
-                    resolver_fns,
-                )
-            }
-            Fields::Named(FieldsNamed { named, .. }) => {
-                let FieldResults {
-                    def_fields,
-                    field_conversions,
-                    resolver_fns,
-                } = named
-                    .iter()
-                    .map(|field| {
-                        let field_ident = field.ident.as_ref();
-                        process_field(field, field_ident.unwrap(), field_ident, ctx)
-                    })
-                    .collect::<Result<FieldResults, syn::Error>>()?;
-                (
-                    quote! {
-                        #def_type::#variant_ident { #(#def_fields),* } => Self::#variant_ident { #(#field_conversions),* }
-                    },
-                    resolver_fns,
-                )
-            }
-        };
-        variant_conversions.push(variant_conversion);
-        resolver_fns.append(&mut variant_resolver_fns);
-    }
-
-    let variant_conversions = variant_conversions.into_iter();
-    let def_var_ident = &ctx.def_var_ident;
     Ok(DefTransformResult {
-        transformation: quote! {
-            match #def_var_ident {
-                #(#variant_conversions),*
-            }
-        },
-        resolver_fns,
+        transformation: result.transformation,
+        resolver_fns: result.extra_items,
     })
-}
-
-struct FieldResults {
-    def_fields: Vec<TokenStream>,
-    field_conversions: Vec<TokenStream>,
-    resolver_fns: Vec<TokenStream>,
-}
-
-impl FromIterator<FieldResult> for FieldResults {
-    fn from_iter<T: IntoIterator<Item = FieldResult>>(iter: T) -> Self {
-        let iter = iter.into_iter();
-        let mut def_fields = Vec::new();
-        let mut field_conversions = Vec::with_capacity(iter.size_hint().0);
-        let mut resolver_fns = Vec::new();
-
-        for FieldResult {
-            def_field,
-            def_conversion,
-            resolver_fn,
-        } in iter
-        {
-            field_conversions.push(def_conversion);
-            if let Some(resolver_fn) = resolver_fn {
-                resolver_fns.push(resolver_fn);
-            }
-            if let Some(def_field) = def_field {
-                def_fields.push(def_field);
-            }
-        }
-
-        Self {
-            def_fields,
-            field_conversions,
-            resolver_fns,
-        }
-    }
-}
-
-struct FieldResult {
-    def_field: Option<TokenStream>,
-    def_conversion: TokenStream,
-    resolver_fn: Option<TokenStream>,
 }
 
 fn process_field(
@@ -222,7 +58,7 @@ fn process_field(
     artificial_field_ident: &Ident,
     field_access: impl ToTokens,
     ctx: &FromDefImplContext,
-) -> Result<FieldResult, syn::Error> {
+) -> Result<FieldTransform, syn::Error> {
     let elf_attr = FieldElfAttr::from_attrs(&field.attrs)?;
     let resolver_expr = if let Some(field_spec) = elf_attr.as_ref().and_then(|a| a.spec.as_ref()) {
         Some(generate_resolver_from(&field.ty, field_spec, ctx)?)
@@ -232,26 +68,27 @@ fn process_field(
             .and_then(|a| a.resolver.as_ref().map(|r| r.to_token_stream()))
     };
 
-    Ok(FieldResult {
-        def_field: if elf_attr.as_ref().is_some_and(|attr| attr.omit_def_field()) {
+    Ok(FieldTransform {
+        bound_ident: if elf_attr.as_ref().is_some_and(|attr| attr.omit_def_field()) {
             None
         } else {
             Some(artificial_field_ident.to_token_stream())
         },
-        def_conversion: generate_field_conversion(
+        conversion_expr: generate_field_conversion(
             field,
             elf_attr.as_ref(),
             resolver_expr.as_ref(),
             field_access,
             ctx,
         )?,
-        resolver_fn: elf_attr
+        extra_items: elf_attr
             .and_then(|elf| {
                 elf.expose_resolver.then(|| {
                     generate_resolver_access(field, resolver_expr.as_ref(), artificial_field_ident)
                 })
             })
-            .transpose()?,
+            .transpose()?
+            .map_or_else(Vec::default, |resolver_access| vec![resolver_access]),
     })
 }
 
@@ -422,19 +259,6 @@ fn extract_asset_type(field_type: &syn::Type) -> Option<&syn::Type> {
         }
         None
     }
-}
-
-fn generate_field_name_for_unnamed(
-    prefix: Option<&str>,
-    field_index: usize,
-    field_span: Span,
-) -> Ident {
-    let name = if let Some(prefix) = prefix {
-        format!("{prefix}{field_index}")
-    } else {
-        format!("field{field_index}")
-    };
-    Ident::new(&name, field_span)
 }
 
 fn generate_resolver_fn_name(field_ident: &Ident) -> Ident {

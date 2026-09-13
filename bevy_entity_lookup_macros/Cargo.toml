@@ -1,10 +1,10 @@
 [package]
-name = "bevy_elf_macros"
+name = "bevy_entity_lookup_macros"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Koettlitz/elf"
-description = "Derive macros for bevy_elf"
+description = "Derive macros for bevy_entity_lookup"
 
 [lib]
 proc-macro = true
@@ -15,12 +15,7 @@ quote = { workspace = true }
 proc-macro2 = { workspace = true } 
 proc-macro-crate = "3"
 elf-macro-utils = { path = "../elf_macro_utils" }
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
-bevy_elf = { path = "../bevy_elf" }
-bevy_asset = { workspace = true }
-bevy_image = { workspace = true } 
-bevy_reflect = { workspace = true }
-serde = { workspace = true }
-prettyplease = "0.3"
-trybuild = "1"
+bevy_entity_lookup = { path = "../bevy_entity_lookup" }

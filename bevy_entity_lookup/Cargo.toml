@@ -1,0 +1,18 @@
+[package]
+name = "bevy_entity_lookup"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["bevy_asset", "bevy_elf"]
+bevy_asset = ["dep:bevy_asset"]
+bevy_elf = ["dep:bevy_elf", "dep:serde"]
+
+[dependencies]
+bevy_ecs = { workspace = true }
+bevy_app = { workspace = true }
+thiserror = { workspace = true }
+bevy_entity_lookup_macros = { path = "../bevy_entity_lookup_macros" }
+bevy_asset = { workspace = true, optional = true }
+bevy_elf = { path = "../bevy_elf", optional = true }
+serde = { workspace = true, optional = true }
