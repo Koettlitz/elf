@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["bevy_elf_macros", "bevy_elf", "bevy_entity_lookup", "elf_macro_utils", "bevy_entity_lookup_macros"]
+members = ["bevy_elf_macros", "bevy_elf", "bevy_entity_lookup", "elf_macro_utils", "bevy_entity_lookup_macros", "bevy_spawn_phase_events"]
 
 [workspace.dependencies]
 syn = { version = "3.0" }
